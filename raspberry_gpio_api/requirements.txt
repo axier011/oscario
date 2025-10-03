@@ -1,0 +1,17 @@
+# Raspberry Pi GPIO API - Requirements
+# Librerías necesarias para la API
+
+# Framework web
+Flask==2.3.3
+Flask-CORS==4.0.0
+
+# GPIO para Raspberry Pi
+RPi.GPIO==0.7.1
+
+# Utilidades adicionales
+gunicorn==21.2.0
+requests==2.31.0
+
+# Desarrollo y testing (opcional)
+pytest==7.4.2
+pytest-flask==1.2.1
