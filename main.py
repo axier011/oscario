@@ -846,12 +846,22 @@ async def git_push():
             )
         # git add -A (como root, acceso total a los ficheros)
         subprocess.run(["git", "-C", wd, "add", "-A"], env=root_env)
-        # git commit (solo si hay algo nuevo)
+        # git commit (solo si hay algo nuevo) — identidad necesaria para root
         msg = f"auto: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        subprocess.run(
+        commit_env = {
+            **root_env,
+            "GIT_AUTHOR_NAME":     "Oscario",
+            "GIT_AUTHOR_EMAIL":    "oscario@dao.local",
+            "GIT_COMMITTER_NAME":  "Oscario",
+            "GIT_COMMITTER_EMAIL": "oscario@dao.local",
+        }
+        commit_r = subprocess.run(
             ["git", "-C", wd, "commit", "-m", msg],
-            capture_output=True, text=True, env=root_env
+            capture_output=True, text=True, env=commit_env
         )
+        # Si el commit falla por algo que no sea "nothing to commit", reportar
+        if commit_r.returncode != 0 and "nothing to commit" not in commit_r.stdout + commit_r.stderr:
+            raise HTTPException(status_code=500, detail=(commit_r.stdout + commit_r.stderr).strip() or "Error en git commit")
         # git push como axier para usar su clave SSH
         subprocess.run(
             ["sudo", "-u", "axier", "git", "config", "--global", "--add", "safe.directory", wd],

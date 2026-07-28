@@ -39,7 +39,9 @@ export default function TopBar() {
 
   return (
     <header className="topbar">
-      <div className="topbar-logo">🐠</div>
+      <div className="topbar-logo">
+        <i className="fa-solid fa-fish" />
+      </div>
 
       <div className="topbar-titles">
         <div className="topbar-name">Oscario</div>
