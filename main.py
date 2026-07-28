@@ -731,12 +731,18 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # ─────────────────────────────────────────────────────────────────
 # SERVIR FRONTEND ESTÁTICO
+# Sirve dist/index.html (build React) si existe, o index.html legacy
 # ─────────────────────────────────────────────────────────────────
+_DIST  = os.path.join(os.path.dirname(__file__), "dist")
+_INDEX = os.path.join(_DIST, "index.html") if os.path.isdir(_DIST) else "index.html"
+
+if os.path.isdir(_DIST):
+    app.mount("/assets", StaticFiles(directory=os.path.join(_DIST, "assets")), name="assets")
+
+
 @app.get("/", include_in_schema=False)
-async def root():
-    if os.path.exists("index.html"):
-        return FileResponse("index.html")
-    return JSONResponse({"message": "AquaPi API v1.0 — Documentación en /docs"})
+async def serve_index():
+    return FileResponse(_INDEX)
 
 
 @app.get("/health", summary="Health check")
