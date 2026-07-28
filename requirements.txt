@@ -8,6 +8,6 @@ pydantic>=2.9.0
 
 # Opcional: solo instalar en la Raspberry Pi real
 # RPi.GPIO==0.7.1          # GPIO hardware
-# python-telegram-bot==21.0 # Bot de Telegram
+python-telegram-bot==21.0  # Bot de Telegram
 # SpeechRecognition==3.10.0 # Voz
 # gTTS==2.5.1              # Text-to-Speech

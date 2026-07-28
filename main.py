@@ -385,9 +385,22 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 AquaPi iniciando...")
     await init_db()
     task = asyncio.create_task(poll_physical_buttons())
+    # ── Telegram bot (opcional — requiere telegram.cfg con token) ──
+    try:
+        from telegram_bot import start_telegram_bot
+        await start_telegram_bot(toggle_pin, get_db)
+    except ImportError:
+        logger.warning("⚠️  python-telegram-bot no instalado — bot de Telegram desactivado")
+    except Exception as _tg_err:
+        logger.error(f"⚠️  Error al iniciar bot de Telegram: {_tg_err}")
     logger.info("✅ AquaPi listo para recibir conexiones")
     yield
     task.cancel()
+    try:
+        from telegram_bot import stop_telegram_bot
+        await stop_telegram_bot()
+    except Exception:
+        pass
     GPIO.cleanup()
     logger.info("🛑 AquaPi detenido correctamente")
 

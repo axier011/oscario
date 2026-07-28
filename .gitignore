@@ -1,6 +1,7 @@
 venv/
 __pycache__/
 *.db
+telegram.cfg
 *.db-wal
 *.db-shm
 .env
