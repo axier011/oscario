@@ -70,3 +70,56 @@ desde un navegador web en tiempo real, con historial de eventos y lectura de sen
 Si `RPi.GPIO` no está disponible (desarrollo en PC), el backend carga un mock
 `_MockGPIO` que simula el hardware. Los estados se guardan en memoria y BBDD
 pero no activan pines físicos.
+
+## Errores conocidos y soluciones
+
+### 502 Bad Gateway (nginx)
+- **Causa A:** FastAPI no está corriendo → `sudo systemctl start acuario-api`
+- **Causa B:** FastAPI arranca y se cae en bucle → ver logs: `journalctl -u acuario-api -f`
+
+### status=217/USER — Failed to determine user credentials
+- **Causa:** El `User=` del servicio systemd no existe en el sistema
+- **Fix:** Cambiar `User=` en `/etc/systemd/system/acuario-api.service` al usuario real
+  y ejecutar `sudo systemctl daemon-reload && sudo systemctl restart acuario-api`
+
+### status=203/EXEC — Failed at step EXEC
+- **Causa:** El ejecutable de Python del venv no existe en la ruta indicada
+- **Fix:** Verificar con `ls /ruta/venv/bin/python*`; si no existe, recrear el venv:
+  `python3 -m venv venv && venv/bin/pip install -r requirements.txt`
+
+### SIGBUS / core-dump (status=7/BUS)
+- **Causa:** `pydantic-core` incompatible con la versión de Python instalada
+- **Fix:** `venv/bin/pip install "pydantic>=2.9.0" --upgrade`
+- **Contexto:** pydantic ≤ 2.7.x no soporta Python 3.13
+
+### RuntimeError: No access to /dev/mem. Try running as root!
+- **Causa:** RPi.GPIO necesita acceso a `/dev/mem` y el servicio no corre como root
+- **Fix rápido:** Cambiar `User=root` en el archivo de servicio systemd
+- **Fix correcto:** `sudo usermod -a -G gpio <usuario>` + `sudo chmod g+rw /dev/gpiomem`
+
+### ERROR: Failed building wheel for pydantic-core
+- **Causa:** pip intenta compilar pydantic-core desde fuente (Rust/Cargo) porque no hay
+  wheel precompilado para esa versión de Python
+- **Fix:** Usar `pydantic>=2.9.0` que sí tiene wheels para Python 3.13+
+
+### Address already in use (port 8000)
+- **Causa:** El servicio ya está corriendo y se intenta arrancar otra instancia manualmente
+- **Fix:** `sudo systemctl stop acuario-api` antes de lanzar manualmente, o usar solo systemctl
+
+### GPIO en modo SIMULACIÓN (pines no se activan físicamente)
+- **Causa:** `RPi.GPIO` no instalado en el venv
+- **Fix:** `venv/bin/pip install RPi.GPIO`
+
+### nginx — 404 Not Found
+- **Causa:** nginx no tiene configurado el proxy a FastAPI
+- **Fix:** Crear `/etc/nginx/sites-available/acuario-api` con proxy_pass a 127.0.0.1:8000,
+  hacer symlink en sites-enabled, eliminar el default y recargar nginx
+
+## Comandos de diagnóstico rápido
+```bash
+sudo systemctl status acuario-api          # estado del servicio
+journalctl -u acuario-api -n 30 --no-pager # últimos logs
+ss -tlnp | grep 8000                       # ¿está escuchando el puerto?
+venv/bin/python main.py                    # arranque manual para ver error en directo
+sqlite3 /var/www/html/database.db ".tables" # verificar BBDD
+```
