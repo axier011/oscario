@@ -48,10 +48,15 @@
       position:sticky; top:0; z-index:200;
     }
     .brand { display:flex; align-items:center; gap:9px; }
-    .brand-ico { width:30px; height:30px; border-radius:7px; background:linear-gradient(135deg,var(--teal),var(--blue)); display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; }
-    .brand-name { font-size:15px; font-weight:800; letter-spacing:-.2px; }
+    .brand-ico { width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,var(--teal),var(--blue)); display:flex; align-items:center; justify-content:center; color:#fff; font-size:15px; flex-shrink:0; }
+    .brand-name { font-size:16px; font-weight:800; letter-spacing:-.2px; line-height:1.1; }
     .brand-sep  { color:var(--t3); margin:0 3px; }
-    .brand-sub  { font-size:11px; color:var(--t3); font-weight:500; }
+    .brand-sub  { font-size:10px; color:var(--t3); font-weight:500; line-height:1.2; }
+    /* Theme switcher */
+    .theme-sw { display:flex; gap:2px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:2px; }
+    .theme-sw-btn { padding:4px 10px; border-radius:6px; border:none; background:transparent; color:var(--t3); font-size:11px; font-weight:700; cursor:pointer; font-family:var(--font); transition:all var(--tr); }
+    .theme-sw-btn.sw-active { background:var(--surface); color:var(--t1); box-shadow:0 1px 4px rgba(0,0,0,.18); }
+    html[data-theme="light"] .theme-sw-btn.sw-active { box-shadow:0 1px 3px rgba(0,0,0,.12); }
     .topbar-r   { display:flex; align-items:center; gap:10px; }
     .pill { display:flex; align-items:center; gap:5px; padding:4px 10px; border-radius:20px; border:1px solid; font-size:11px; font-weight:700; }
     .pill.on   { color:var(--green);  border-color:rgba(67,168,104,.3);  background:rgba(67,168,104,.08);  }
@@ -518,16 +523,18 @@
 <header class="topbar">
   <div class="brand">
     <div class="brand-ico"><i class="fa-solid fa-fish"></i></div>
-    <span class="brand-name">Oscario</span>
-    <span class="brand-sep">/</span>
-    <span class="brand-sub">Raspberry Pi 4B</span>
+    <div>
+      <div class="brand-name">Oscario</div>
+      <div class="brand-sub">Acuario automatizado · Raspberry Pi 4B</div>
+    </div>
   </div>
   <div class="topbar-r">
-    <span class="gpio-badge" id="gpio-mode">GPIO: —</span>
+    <div class="theme-sw">
+      <button class="theme-sw-btn" id="tsw-light" onclick="setTheme('light')">Claro</button>
+      <button class="theme-sw-btn" id="tsw-dark" onclick="setTheme('dark')">Oscuro</button>
+      <button class="theme-sw-btn" id="tsw-auto" onclick="setTheme('auto')">Auto</button>
+    </div>
     <div class="pill wait" id="ws-pill"><div class="pill-dot"></div><span id="ws-lbl">Conectando</span></div>
-    <span class="clock" id="clock">--:--:--</span>
-    <button class="icon-btn" onclick="toggleTheme()" title="Modo claro/oscuro" id="theme-btn"><i class="fa-solid fa-moon"></i></button>
-    <button class="icon-btn danger" onclick="confirmRestart()" title="Reiniciar servicio acuario-api"><i class="fa-solid fa-arrows-rotate"></i></button>
   </div>
 </header>
 
@@ -558,11 +565,12 @@
   <div class="osc-bottom-grid">
     <!-- Salud -->
     <div class="card">
-      <div class="card-hdr">
-        <div class="card-title"><div class="card-ico"><i class="fa-solid fa-heart-pulse"></i></div> Salud del acuario</div>
-        <span class="card-tag" id="health-score">—/100</span>
-      </div>
-      <div style="padding:12px 14px">
+      <div style="padding:14px 14px 12px">
+        <div class="sec-lbl" style="margin:0 0 4px"><i class="fa-solid fa-heart-pulse" style="color:var(--teal)"></i> Salud del acuario</div>
+        <div style="display:flex;align-items:baseline;gap:3px;margin-bottom:10px">
+          <span style="font-family:var(--mono);font-size:44px;font-weight:800;line-height:1;color:var(--teal)" id="health-score-n">—</span>
+          <span style="font-family:var(--mono);font-size:18px;color:var(--t3);font-weight:600">/100</span>
+        </div>
         <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;min-height:24px" id="health-pills"></div>
         <div style="height:5px;background:var(--card);border-radius:3px;overflow:hidden;margin-bottom:10px">
           <div id="health-bar" style="height:100%;background:linear-gradient(90deg,var(--teal),var(--green));border-radius:3px;transition:width .6s ease;width:0%"></div>
@@ -680,8 +688,8 @@ const PM = {
   POWER_5V:    {c:'var(--c5v)',   g:'rgba(192,68,74,.4)',   ctrl:false, icon:'fa-bolt',          label:'5V'},
   POWER_3V3:   {c:'var(--c33v)', g:'rgba(212,118,42,.4)',  ctrl:false, icon:'fa-bolt',          label:'3.3V'},
   GROUND:      {c:'#4a5568',     g:'transparent',           ctrl:false, icon:'fa-minus',         label:'GND'},
-  GPIO_OUTPUT: {c:'var(--cout)', g:'rgba(74,144,217,.5)',   ctrl:true,  icon:'fa-lightbulb',     label:'Salida'},
-  GPIO_INPUT:  {c:'var(--cin)',  g:'rgba(67,168,104,.5)',   ctrl:true,  icon:'fa-circle-dot',    label:'Entrada'},
+  GPIO_OUTPUT: {c:'var(--cout)', g:'rgba(74,144,217,.5)',   ctrl:true,  icon:'fa-lightbulb',     label:'GPIO'},
+  GPIO_INPUT:  {c:'var(--cin)',  g:'rgba(67,168,104,.5)',   ctrl:true,  icon:'fa-circle-dot',    label:'GPIO'},
   GPIO_SPI:    {c:'var(--cspi)', g:'rgba(124,96,204,.4)',   ctrl:false, icon:'fa-arrow-right-arrow-left', label:'SPI'},
   GPIO_I2C:    {c:'var(--ci2c)', g:'rgba(200,136,42,.4)',   ctrl:false, icon:'fa-link',          label:'I²C'},
   GPIO_UART:   {c:'var(--cuart)',g:'rgba(176,96,64,.4)',    ctrl:false, icon:'fa-wave-square',   label:'UART'},
@@ -775,14 +783,16 @@ function updateHealth(){
   const onCount=ctrl.filter(p=>parseInt(p.current_state)===1).length;
   const hasFilter=ctrl.some(p=>p.name.toLowerCase().includes('filtro')&&parseInt(p.current_state)===1);
   const hasLight =ctrl.some(p=>p.name.toLowerCase().includes('luz')  &&parseInt(p.current_state)===1);
+  const tempOk=lastWaterTemp!==null&&lastWaterTemp>=23&&lastWaterTemp<=26.5;
   const score=Math.min(100, 60+Math.round((onCount/ctrl.length)*40));
-  const scoreEl=document.getElementById('health-score');
+  const scoreEl=document.getElementById('health-score-n');
   const barEl  =document.getElementById('health-bar');
   const pillsEl=document.getElementById('health-pills');
-  if(scoreEl) scoreEl.textContent=`${score}/100`;
+  if(scoreEl) scoreEl.textContent=score;
   if(barEl)   barEl.style.width=score+'%';
   if(pillsEl){
     const pills=[];
+    if(lastWaterTemp!==null) pills.push({l:'Temp. óptima', c:tempOk?'var(--teal)':'var(--amber)'});
     if(hasFilter) pills.push({l:'Filtro activo',  c:'var(--green)'});
     if(hasLight)  pills.push({l:'Luz encendida',  c:'var(--teal)'});
     pills.push({l:`${onCount}/${ctrl.length} activos`,c:'var(--blue)'});
@@ -793,7 +803,7 @@ function updateHealth(){
   }
 }
 
-let pins={}, logs=[], events=0, ws, wsT, wsA=0;
+let pins={}, logs=[], events=0, ws, wsT, wsA=0, lastWaterTemp=null;
 
 /* ── CLOCK ── */
 function tick(){
@@ -837,17 +847,21 @@ function buildControlPage(){
     div.id=`pc-${p.pin_number}`;
     div.style.setProperty('--pc',m.c);
     div.innerHTML=`
-      <div class="pc-head">
-        <div class="pc-icon-wrap"><i class="fa-solid ${fa}"></i></div>
-        <div class="pc-tog" id="pct-${p.pin_number}"></div>
+      <div class="pc-top">
+        <div class="pc-icon-circle"><i class="fa-solid ${fa}"></i></div>
+        <button class="ios-tog" onclick="event.stopPropagation();doToggle(${p.pin_number})"></button>
       </div>
       <div class="pc-name">${p.name}</div>
-      <div class="pc-meta">Pin ${p.pin_number}${p.bcm_number>=0?' · BCM '+p.bcm_number:''}</div>
-      <div class="pc-state ${on?'on':'off'}" id="pcst-${p.pin_number}">
-        <i class="fa-solid ${on?'fa-circle-dot':'fa-circle'}"></i> ${on?'Encendido':'Apagado'}
+      <div class="pc-info-row">
+        <span class="pc-badge ${on?'on':'off'}" id="pcst-${p.pin_number}">${on?'ON':'OFF'}</span>
+        <span class="pc-type-tag">${m.label} · PIN ${p.pin_number}</span>
       </div>
-      <div class="pc-bar"></div>`;
+      <div class="pc-bottom">
+        <div class="pc-bar"></div>
+        <button class="pc-edit-btn" onclick="event.stopPropagation();ctxPin=${p.pin_number};openRenameModal()" title="Renombrar"><i class="fa-solid fa-pencil"></i></button>
+      </div>`;
     div.addEventListener('click',()=>doToggle(p.pin_number));
+    div.addEventListener('contextmenu',e=>{e.preventDefault();showCtxMenu(e,p.pin_number);});
     cardEl.appendChild(div);
   });
 
@@ -1126,10 +1140,12 @@ function updSensor(m){
   const v=document.getElementById(ids[0]),t=document.getElementById(ids[1]);
   if(v) v.textContent=parseFloat(m.value).toFixed(1);
   if(m.sensor_name==='DS18B20_Temperatura'){
+    lastWaterTemp=parseFloat(m.value);
     setGaugeArc('gauge-water',m.value,15,35);
     const b=document.getElementById('sensor-water-badge');
     if(b){b.style.display='';b.textContent=m.value>=23&&m.value<=26.5?'OK':'⚠';b.className=`card-tag ${m.value>=23&&m.value<=26.5?'osc-ok-badge':''}`;}
     if(t) t.textContent='Rango ideal 23 – 26.5 °C';
+    updateHealth();
   }
   if(m.sensor_name==='CPU_Temp'){
     setGaugeArc('gauge-cpu',m.value,30,80);
@@ -1151,15 +1167,18 @@ function toast(text,type='ok'){
 }
 
 /* ── THEME ── */
-function toggleTheme(){
-  const html=document.documentElement;
-  const isDark=html.getAttribute('data-theme')!=='light';
-  html.setAttribute('data-theme', isDark?'light':'dark');
-  const btn=document.getElementById('theme-btn');
-  btn.innerHTML=isDark?'<i class="fa-solid fa-sun"></i>':'<i class="fa-solid fa-moon"></i>';
-  localStorage.setItem('aquapi-theme', isDark?'light':'dark');
+function setTheme(t){
+  const prefs=window.matchMedia('(prefers-color-scheme:dark)');
+  const isDark=t==='dark'||(t==='auto'&&prefs.matches);
+  document.documentElement.setAttribute('data-theme',isDark?'dark':'light');
+  localStorage.setItem('aquapi-theme',t);
+  document.querySelectorAll('.theme-sw-btn').forEach(b=>b.classList.remove('sw-active'));
+  const btn=document.getElementById('tsw-'+t); if(btn) btn.classList.add('sw-active');
 }
-(()=>{ const t=localStorage.getItem('aquapi-theme'); if(t) document.documentElement.setAttribute('data-theme',t); const isDark=document.documentElement.getAttribute('data-theme')!=='light'; document.getElementById('theme-btn').innerHTML=isDark?'<i class="fa-solid fa-moon"></i>':'<i class="fa-solid fa-sun"></i>'; })();
+(()=>{
+  const t=localStorage.getItem('aquapi-theme')||'light';
+  setTheme(t);
+})();
 
 /* ── BULK TOGGLE ── */
 async function allPins(state){
