@@ -88,31 +88,60 @@
     .sec-lbl { font-size:10px; font-weight:800; color:var(--t3); text-transform:uppercase; letter-spacing:1.2px; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
     .sec-lbl::after { content:''; flex:1; height:1px; background:var(--border); }
 
-    /* Pin cards */
-    .pin-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:9px; margin-bottom:20px; }
+    /* ── Pin cards — Oscario design ── */
+    .pin-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; margin-bottom:20px; }
     .pin-card {
-      background:var(--surface); border:1.5px solid var(--border); border-radius:var(--r);
-      padding:14px 13px 12px; cursor:pointer; transition:all var(--tr); user-select:none; position:relative;
+      background:var(--surface); border:1.5px solid var(--border); border-radius:14px;
+      padding:16px 16px 12px; cursor:pointer; transition:all var(--tr); user-select:none;
     }
-    .pin-card:hover { border-color:var(--pc); background:var(--hover); }
-    .pin-card.state-on { border-color:var(--pc); background:var(--hover); box-shadow:0 0 0 1px var(--pc) inset; }
+    .pin-card:hover { background:var(--hover); }
+    .pin-card.state-on { border-color:var(--pc); }
 
-    .pc-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:11px; }
-    .pc-icon-wrap { width:36px; height:36px; border-radius:8px; background:rgba(255,255,255,.05); display:flex; align-items:center; justify-content:center; font-size:15px; transition:all var(--tr); }
-    .pin-card.state-on .pc-icon-wrap { background:var(--pc); color:#fff; }
-    .pc-icon-wrap i { transition:color var(--tr); }
-    .pin-card:not(.state-on) .pc-icon-wrap i { color:var(--pc); }
+    .pc-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; }
+    .pc-icon-circle { width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; background:rgba(255,255,255,.07); color:var(--pc); transition:all var(--tr); flex-shrink:0; }
+    .pin-card.state-on .pc-icon-circle { background:var(--pc); color:#fff; }
 
-    /* Toggle pill */
-    .pc-tog { width:38px; height:21px; border-radius:11px; border:1.5px solid rgba(255,255,255,.12); background:rgba(255,255,255,.07); position:relative; transition:all var(--tr); }
-    .pc-tog::after { content:''; position:absolute; width:15px; height:15px; border-radius:50%; background:#fff; top:1px; left:1px; transition:all var(--tr); box-shadow:0 1px 3px rgba(0,0,0,.5); }
-    .pin-card.state-on .pc-tog { background:var(--pc); border-color:var(--pc); }
-    .pin-card.state-on .pc-tog::after { left:20px; }
+    /* iOS toggle */
+    .ios-tog { width:44px; height:26px; border-radius:13px; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.12); position:relative; cursor:pointer; transition:background .2s ease; flex-shrink:0; outline:none; display:block; }
+    .ios-tog::after { content:''; position:absolute; width:20px; height:20px; border-radius:50%; background:#fff; top:2px; left:2px; transition:transform .2s ease; box-shadow:0 1px 4px rgba(0,0,0,.3); }
+    .pin-card.state-on .ios-tog { background:var(--green); border-color:var(--green); }
+    .pin-card.state-on .ios-tog::after { transform:translateX(18px); }
 
-    .pc-name { font-size:12px; font-weight:700; color:var(--t1); line-height:1.35; margin-bottom:2px; }
-    .pc-meta { font-size:10px; color:var(--t3); font-family:var(--mono); margin-bottom:8px; }
-    .pc-state { font-size:10px; font-weight:700; display:flex; align-items:center; gap:4px; }
-    .pc-state.on { color:var(--green); } .pc-state.off { color:var(--t3); }
+    .pc-name { font-size:15px; font-weight:800; line-height:1.2; margin-bottom:5px; color:var(--t1); }
+    .pc-info-row { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+    .pc-badge { font-size:9px; font-weight:800; padding:2px 6px; border-radius:4px; text-transform:uppercase; letter-spacing:.4px; }
+    .pc-badge.on  { background:rgba(67,168,104,.18); color:var(--green); }
+    .pc-badge.off { background:rgba(255,255,255,.08); color:var(--t3); }
+    .pc-type-tag { font-family:var(--mono); font-size:9px; color:var(--t3); }
+
+    .pc-bottom { display:flex; align-items:center; gap:8px; margin-top:10px; }
+    .pc-edit-btn { width:22px; height:22px; border-radius:5px; border:none; background:transparent; color:var(--t3); font-size:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all var(--tr); flex-shrink:0; padding:0; }
+    .pc-edit-btn:hover { background:rgba(255,255,255,.1); color:var(--t2); }
+
+    html[data-theme="light"] .pc-icon-circle { background:rgba(0,0,0,.05); }
+    html[data-theme="light"] .ios-tog { background:rgba(0,0,0,.12); border-color:rgba(0,0,0,.1); }
+    html[data-theme="light"] .ios-tog::after { box-shadow:0 1px 3px rgba(0,0,0,.15); }
+    html[data-theme="light"] .pc-badge.off { background:rgba(0,0,0,.06); }
+    html[data-theme="light"] .pc-edit-btn:hover { background:rgba(0,0,0,.07); }
+
+    /* ── Section header ── */
+    .osc-sec-hdr { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+    .osc-sec-title { font-size:15px; font-weight:800; }
+    .osc-sec-count { font-family:var(--mono); font-size:12px; color:var(--t3); font-weight:600; }
+
+    /* ── Bottom grid (salud + sensores) ── */
+    .osc-bottom-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; }
+    @media(max-width:900px){ .osc-bottom-grid{grid-template-columns:1fr 1fr;} }
+    @media(max-width:600px){ .osc-bottom-grid{grid-template-columns:1fr;} }
+
+    /* ── Gauge ── */
+    .osc-gauge-wrap { display:flex; flex-direction:column; align-items:center; padding:8px 14px 14px; }
+    .osc-gauge-svg { width:100%; max-width:150px; height:auto; display:block; }
+    .osc-gauge-val { font-family:var(--mono); font-size:28px; font-weight:700; display:flex; align-items:baseline; gap:3px; margin-top:4px; }
+    .osc-gauge-unit { font-size:14px; color:var(--t2); font-weight:500; }
+    .osc-gauge-range { font-size:10px; color:var(--t3); margin-top:4px; text-align:center; line-height:1.4; }
+    .osc-ok-badge { color:var(--green) !important; border-color:rgba(67,168,104,.3) !important; background:rgba(67,168,104,.1) !important; }
+    html[data-theme="light"] .osc-gauge-svg path:first-child { stroke:rgba(0,0,0,.07); }
 
     /* Info pins */
     .info-pins { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:6px; }
@@ -442,20 +471,21 @@
     .modal-btn.confirm:hover { filter:brightness(1.1); }
 
     /* ── PIN CARD BAR ── */
-    .pc-bar { height:22px; border-radius:5px; margin-top:8px; position:relative; overflow:hidden; background:rgba(255,255,255,.04); flex-shrink:0; }
-    .pin-card.state-on .pc-bar::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,transparent,var(--pc),rgba(255,255,255,.35),var(--pc),transparent); background-size:300% 100%; animation:pc-wave 2s linear infinite; border-radius:5px; }
+    .pc-bar { flex:1; height:5px; border-radius:3px; position:relative; overflow:visible; background:rgba(255,255,255,.06); }
+    .pin-card.state-on .pc-bar { overflow:hidden; }
+    .pin-card.state-on .pc-bar::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,transparent,var(--pc),rgba(255,255,255,.35),var(--pc),transparent); background-size:300% 100%; animation:pc-wave 2s linear infinite; border-radius:3px; }
     @keyframes pc-wave { 0%{background-position:200% center}100%{background-position:-100% center} }
     .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::before,
-    .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::after { content:''; position:absolute; border-radius:50%; background:rgba(255,255,255,.22); }
-    .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::before { width:4px;height:4px;bottom:2px;left:22%; animation:bub-up 2.4s ease-in infinite; }
-    .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::after  { width:3px;height:3px;bottom:2px;left:60%; animation:bub-up 2.9s ease-in .85s infinite; }
-    @keyframes bub-up { 0%{transform:translateY(0) scale(1);opacity:.6}100%{transform:translateY(-24px) scale(.3);opacity:0} }
+    .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::after { content:''; position:absolute; border-radius:50%; background:rgba(255,255,255,.3); }
+    .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::before { width:4px;height:4px;bottom:0;left:22%; animation:bub-up 2.4s ease-in infinite; }
+    .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::after  { width:3px;height:3px;bottom:0;left:60%; animation:bub-up 2.9s ease-in .85s infinite; }
+    @keyframes bub-up { 0%{transform:translateY(0) scale(1);opacity:.6}100%{transform:translateY(-14px) scale(.3);opacity:0} }
     .pin-card.comedero-pin:not(.state-on) .pc-bar::before,
     .pin-card.comedero-pin:not(.state-on) .pc-bar::after { content:''; position:absolute; width:3px;height:3px;border-radius:2px;background:var(--amber); }
     .pin-card.comedero-pin:not(.state-on) .pc-bar::before { left:28%;top:0; animation:food-drop 1.8s ease-in infinite; }
     .pin-card.comedero-pin:not(.state-on) .pc-bar::after  { left:66%;top:0; animation:food-drop 1.8s ease-in .9s infinite; }
-    @keyframes food-drop { 0%{transform:translateY(-2px);opacity:.8}100%{transform:translateY(25px);opacity:0} }
-    html[data-theme="light"] .pc-bar { background:rgba(0,0,0,.05); }
+    @keyframes food-drop { 0%{transform:translateY(-2px);opacity:.8}100%{transform:translateY(10px);opacity:0} }
+    html[data-theme="light"] .pc-bar { background:rgba(0,0,0,.06); }
     html[data-theme="light"] .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::before,
     html[data-theme="light"] .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::after { background:rgba(38,166,154,.3); }
 
@@ -510,91 +540,75 @@
 
 <!-- ══ TAB CONTROL ══ -->
 <div class="page active" id="tab-ctrl">
-  <div class="ctrl-layout">
-    <div>
-      <!-- Stats -->
-      <div class="stat-strip">
-        <div class="stat-box">
-          <div class="stat-ico" style="background:rgba(74,144,217,.12);color:var(--blue)"><i class="fa-solid fa-circle-nodes"></i></div>
-          <div class="stat-txt"><div class="stat-n" style="color:var(--blue)" id="st-total">40</div><div class="stat-l">Total pines</div></div>
+  <div class="osc-sec-hdr">
+    <span class="osc-sec-title">Dispositivos</span>
+    <span class="osc-sec-count" id="st-count">— ON / —</span>
+  </div>
+  <div class="bulk-btns">
+    <button class="bulk-btn all-on" onclick="allPins(1)"><i class="fa-solid fa-power-off"></i> Encender todo</button>
+    <button class="bulk-btn all-off" onclick="allPins(0)"><i class="fa-solid fa-power-off" style="opacity:.5"></i> Apagar todo</button>
+  </div>
+  <div class="pin-cards" id="pin-cards"></div>
+
+  <div class="osc-sec-hdr" style="margin-top:4px">
+    <span class="osc-sec-title">Escenas</span>
+  </div>
+  <div class="scenes-grid" id="scenes-grid"></div>
+
+  <div class="osc-bottom-grid">
+    <!-- Salud -->
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title"><div class="card-ico"><i class="fa-solid fa-heart-pulse"></i></div> Salud del acuario</div>
+        <span class="card-tag" id="health-score">—/100</span>
+      </div>
+      <div style="padding:12px 14px">
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;min-height:24px" id="health-pills"></div>
+        <div style="height:5px;background:var(--card);border-radius:3px;overflow:hidden;margin-bottom:10px">
+          <div id="health-bar" style="height:100%;background:linear-gradient(90deg,var(--teal),var(--green));border-radius:3px;transition:width .6s ease;width:0%"></div>
         </div>
-        <div class="stat-box">
-          <div class="stat-ico" style="background:rgba(67,168,104,.12);color:var(--green)"><i class="fa-solid fa-bolt"></i></div>
-          <div class="stat-txt"><div class="stat-n" style="color:var(--green)" id="st-act">0</div><div class="stat-l">Activos HIGH</div></div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-ico" style="background:rgba(124,96,204,.12);color:var(--purple)"><i class="fa-solid fa-toggle-on"></i></div>
-          <div class="stat-txt"><div class="stat-n" style="color:var(--purple)" id="st-out">0</div><div class="stat-l">Controlables</div></div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-ico" style="background:rgba(200,136,42,.12);color:var(--amber)"><i class="fa-solid fa-clock-rotate-left"></i></div>
-          <div class="stat-txt"><div class="stat-n" style="color:var(--amber)" id="st-ev">0</div><div class="stat-l">Eventos</div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--t3)"><i class="fa-solid fa-arrow-up-right-dots"></i> uptime <span id="uptime-val">—</span></span>
+          <button class="bulk-btn" style="padding:5px 10px;font-size:10px;border-radius:6px" onclick="confirmRestart()"><i class="fa-solid fa-arrows-rotate"></i> Reiniciar</button>
         </div>
       </div>
-
-      <div class="sec-lbl"><i class="fa-solid fa-toggle-on" style="color:var(--blue)"></i> Pines controlables</div>
-      <div class="bulk-btns">
-        <button class="bulk-btn all-on"  onclick="allPins(1)"><i class="fa-solid fa-power-off"></i> Encender todo</button>
-        <button class="bulk-btn all-off" onclick="allPins(0)"><i class="fa-solid fa-power-off" style="opacity:.5"></i> Apagar todo</button>
-      </div>
-      <div class="pin-cards" id="pin-cards"></div>
-
-      <div class="sec-lbl" style="margin-top:6px"><i class="fa-solid fa-lock" style="color:var(--t3)"></i> Pines de sistema</div>
-      <div class="info-pins" id="info-pins"></div>
-
-      <div class="sec-lbl" style="margin-top:18px"><i class="fa-solid fa-layer-group" style="color:var(--purple)"></i> Escenas</div>
-      <div class="scenes-grid" id="scenes-grid"></div>
     </div>
-
-    <div class="right-stack">
-      <!-- Sensors -->
-      <div class="card">
-        <div class="card-hdr">
-          <div class="card-title"><div class="card-ico"><i class="fa-solid fa-gauge-high"></i></div> Sensores</div>
-          <span class="card-tag">Tiempo real</span>
-        </div>
-        <div class="sensor-g" style="grid-template-columns:1fr 1fr">
-          <div class="sensor-tile" style="grid-column:1/-1">
-            <div class="st-lbl"><i class="fa-solid fa-temperature-half"></i> Temperatura del agua</div>
-            <div style="display:flex;align-items:baseline;gap:6px">
-              <div class="st-val" id="s-temp" style="color:var(--teal);font-size:32px">—</div>
-              <div class="st-unit" style="font-size:14px">°C</div>
-            </div>
-            <div class="st-time" id="s-temp-t">Sin datos</div>
-          </div>
-          <div class="sensor-tile" style="grid-column:1/-1">
-            <div class="st-lbl"><i class="fa-solid fa-microchip"></i> Temperatura CPU</div>
-            <div style="display:flex;align-items:baseline;gap:6px">
-              <div class="st-val" id="s-cpu" style="color:var(--red);font-size:32px">—</div>
-              <div class="st-unit" style="font-size:14px">°C</div>
-            </div>
-            <div class="st-time" id="s-cpu-t">Sin datos</div>
-          </div>
-          <!-- IDs mantenidos para compatibilidad con WS, pero ocultos -->
-          <span id="s-ph" style="display:none"></span><span id="s-ph-t" style="display:none"></span>
-          <span id="s-nivel" style="display:none"></span><span id="s-nivel-t" style="display:none"></span>
-        </div>
+    <!-- Temp agua -->
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title"><div class="card-ico" style="color:var(--teal)"><i class="fa-solid fa-temperature-half"></i></div> Temperatura del agua</div>
+        <span class="card-tag osc-ok-badge" id="sensor-water-badge" style="display:none">OK</span>
       </div>
-
-      <!-- Salud -->
-      <div class="card">
-        <div class="card-hdr">
-          <div class="card-title"><div class="card-ico"><i class="fa-solid fa-heart-pulse"></i></div> Salud del acuario</div>
-          <span class="card-tag" id="health-score">—/100</span>
-        </div>
-        <div style="padding:12px 14px">
-          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;min-height:24px" id="health-pills"></div>
-          <div style="height:5px;background:var(--card);border-radius:3px;overflow:hidden;margin-bottom:10px">
-            <div id="health-bar" style="height:100%;background:linear-gradient(90deg,var(--teal),var(--green));border-radius:3px;transition:width .6s ease;width:0%"></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <span style="font-family:var(--mono);font-size:10px;color:var(--t3)"><i class="fa-solid fa-arrow-up-right-dots"></i> uptime <span id="uptime-val">—</span></span>
-            <button class="bulk-btn" style="padding:5px 10px;font-size:10px;border-radius:6px" onclick="confirmRestart()"><i class="fa-solid fa-arrows-rotate"></i> Reiniciar</button>
-          </div>
-        </div>
+      <div class="osc-gauge-wrap">
+        <svg viewBox="0 5 120 62" class="osc-gauge-svg">
+          <path d="M 10 60 A 50 50 0 0 1 110 60" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="9" stroke-linecap="round"/>
+          <path id="gauge-water" d="M 10 60 A 50 50 0 0 1 110 60" fill="none" stroke="var(--teal)" stroke-width="9" stroke-linecap="round" stroke-dasharray="0 157"/>
+        </svg>
+        <div class="osc-gauge-val"><span id="s-temp">—</span><span class="osc-gauge-unit">°C</span></div>
+        <div class="osc-gauge-range" id="s-temp-t">Rango ideal 23 – 26.5 °C</div>
+      </div>
+    </div>
+    <!-- Temp CPU -->
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title"><div class="card-ico" style="color:var(--red)"><i class="fa-solid fa-microchip"></i></div> Temperatura CPU</div>
+        <span class="card-tag osc-ok-badge" id="sensor-cpu-badge" style="display:none">OK</span>
+      </div>
+      <div class="osc-gauge-wrap">
+        <svg viewBox="0 5 120 62" class="osc-gauge-svg">
+          <path d="M 10 60 A 50 50 0 0 1 110 60" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="9" stroke-linecap="round"/>
+          <path id="gauge-cpu" d="M 10 60 A 50 50 0 0 1 110 60" fill="none" stroke="var(--red)" stroke-width="9" stroke-linecap="round" stroke-dasharray="0 157"/>
+        </svg>
+        <div class="osc-gauge-val"><span id="s-cpu">—</span><span class="osc-gauge-unit">°C</span></div>
+        <div class="osc-gauge-range" id="s-cpu-t">Advertencia por encima de 50 °C</div>
       </div>
     </div>
   </div>
+
+  <div class="sec-lbl" style="margin-top:2px"><i class="fa-solid fa-lock" style="color:var(--t3)"></i> Pines de sistema</div>
+  <div class="info-pins" id="info-pins"></div>
+  <span id="s-ph" style="display:none"></span><span id="s-ph-t" style="display:none"></span>
+  <span id="s-nivel" style="display:none"></span><span id="s-nivel-t" style="display:none"></span>
 </div>
 
 <!-- ══ TAB MAP ══ -->
@@ -854,7 +868,7 @@ function updateCard(pin_number){
   if(card){
     card.classList.toggle('state-on',on);
     const st=document.getElementById(`pcst-${pin_number}`);
-    if(st){ st.className=`pc-state ${on?'on':'off'}`; st.innerHTML=`<i class="fa-solid ${on?'fa-circle-dot':'fa-circle'}"></i> ${on?'Encendido':'Apagado'}`; }
+    if(st){ st.className=`pc-badge ${on?'on':'off'}`; st.textContent=on?'ON':'OFF'; }
   }
   updateCpin(pin_number);
   updateStats();
@@ -863,9 +877,12 @@ function updateCard(pin_number){
 /* ── STATS ── */
 function updateStats(){
   const all=Object.values(pins);
-  document.getElementById('st-act').textContent=all.filter(p=>parseInt(p.current_state)===1&&CTRL.has(p.pin_type)).length;
-  document.getElementById('st-out').textContent=all.filter(p=>CTRL.has(p.pin_type)).length;
-  document.getElementById('st-ev').textContent=events;
+  const onCount=all.filter(p=>parseInt(p.current_state)===1&&CTRL.has(p.pin_type)).length;
+  const totalCtrl=all.filter(p=>CTRL.has(p.pin_type)).length;
+  const cnt=document.getElementById('st-count'); if(cnt) cnt.textContent=`${onCount} ON / ${totalCtrl}`;
+  const stAct=document.getElementById('st-act'); if(stAct) stAct.textContent=onCount;
+  const stOut=document.getElementById('st-out'); if(stOut) stOut.textContent=totalCtrl;
+  const stEv =document.getElementById('st-ev');  if(stEv)  stEv.textContent=events;
 }
 
 /* ══ CONNECTOR DIAGRAM ══
@@ -1096,7 +1113,31 @@ function fmtT(ts){try{const d=new Date(ts);return d.toLocaleTimeString('es-ES',{
 
 /* ── SENSORS ── */
 const SM={'DS18B20_Temperatura':['s-temp','s-temp-t'],'pH_Sensor':['s-ph','s-ph-t'],'Nivel_Agua':['s-nivel','s-nivel-t'],'CPU_Temp':['s-cpu','s-cpu-t']};
-function updSensor(m){const ids=SM[m.sensor_name];if(!ids)return;const v=document.getElementById(ids[0]),t=document.getElementById(ids[1]);if(v)v.textContent=parseFloat(m.value).toFixed(1);if(t)t.textContent=fmtT(m.timestamp);}
+
+function setGaugeArc(id,val,min,max){
+  const arc=document.getElementById(id); if(!arc) return;
+  const total=Math.PI*50;
+  const ratio=Math.max(0,Math.min(1,(val-min)/(max-min)));
+  arc.setAttribute('stroke-dasharray',`${(ratio*total).toFixed(1)} ${total.toFixed(1)}`);
+}
+
+function updSensor(m){
+  const ids=SM[m.sensor_name];if(!ids)return;
+  const v=document.getElementById(ids[0]),t=document.getElementById(ids[1]);
+  if(v) v.textContent=parseFloat(m.value).toFixed(1);
+  if(m.sensor_name==='DS18B20_Temperatura'){
+    setGaugeArc('gauge-water',m.value,15,35);
+    const b=document.getElementById('sensor-water-badge');
+    if(b){b.style.display='';b.textContent=m.value>=23&&m.value<=26.5?'OK':'⚠';b.className=`card-tag ${m.value>=23&&m.value<=26.5?'osc-ok-badge':''}`;}
+    if(t) t.textContent='Rango ideal 23 – 26.5 °C';
+  }
+  if(m.sensor_name==='CPU_Temp'){
+    setGaugeArc('gauge-cpu',m.value,30,80);
+    const b=document.getElementById('sensor-cpu-badge');
+    if(b){b.style.display='';b.textContent=m.value<50?'OK':'⚠';b.className=`card-tag ${m.value<50?'osc-ok-badge':''}`;}
+    if(t) t.textContent=m.value<50?'Temperatura normal':'Advertencia por encima de 50 °C';
+  }
+}
 
 /* ── BADGE ── */
 function setBadge(s,l){const p=document.getElementById('ws-pill'),lb=document.getElementById('ws-lbl');p.className=`pill ${s}`;lb.textContent=l;}
