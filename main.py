@@ -38,6 +38,7 @@ except ImportError:
 
     class _MockGPIO:
         BCM = OUT = IN = HIGH = LOW = 0
+        PUD_UP = PUD_DOWN = PUD_OFF = 0
         _state: dict[int, int] = {}
 
         def setmode(self, m: int) -> None: ...
