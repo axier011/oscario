@@ -816,23 +816,47 @@ async def git_pull():
 @app.post("/api/v1/system/git-push", summary="git push al repositorio remoto")
 async def git_push():
     import subprocess
+    from datetime import datetime
     wd = os.path.dirname(os.path.abspath(__file__))
+    # git add/commit como root (dueño de los ficheros)
+    # git push como axier (tiene la clave SSH configurada en GitHub)
+    root_env = {**os.environ}
+    axier_ssh = {
+        **os.environ,
+        "HOME": "/home/axier",
+        "GIT_SSH_COMMAND": "ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/home/axier/.ssh/known_hosts",
+    }
     try:
+        # safe.directory para root
         subprocess.run(
-            ["sudo", "-u", "axier", "git", "config", "--global", "--add", "safe.directory", wd],
-            capture_output=True
+            ["git", "config", "--global", "--add", "safe.directory", wd],
+            capture_output=True, env=root_env
         )
+        # Convertir remote HTTPS → SSH
         url_r = subprocess.run(
-            ["sudo", "-u", "axier", "git", "-C", wd, "remote", "get-url", "origin"],
-            capture_output=True, text=True
+            ["git", "-C", wd, "remote", "get-url", "origin"],
+            capture_output=True, text=True, env=root_env
         )
         remote = url_r.stdout.strip()
         if remote.startswith("https://github.com/"):
             subprocess.run(
-                ["sudo", "-u", "axier", "git", "-C", wd, "remote", "set-url", "origin",
+                ["git", "-C", wd, "remote", "set-url", "origin",
                  remote.replace("https://github.com/", "git@github.com:")],
-                capture_output=True
+                capture_output=True, env=root_env
             )
+        # git add -A (como root, acceso total a los ficheros)
+        subprocess.run(["git", "-C", wd, "add", "-A"], env=root_env)
+        # git commit (solo si hay algo nuevo)
+        msg = f"auto: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        subprocess.run(
+            ["git", "-C", wd, "commit", "-m", msg],
+            capture_output=True, text=True, env=root_env
+        )
+        # git push como axier para usar su clave SSH
+        subprocess.run(
+            ["sudo", "-u", "axier", "git", "config", "--global", "--add", "safe.directory", wd],
+            capture_output=True
+        )
         result = subprocess.run(
             ["sudo", "-u", "axier", "git", "-C", wd, "push"],
             capture_output=True, text=True, timeout=30
@@ -840,7 +864,7 @@ async def git_push():
         output = (result.stdout + result.stderr).strip()
         if result.returncode != 0:
             raise HTTPException(status_code=500, detail=output or "Error en git push")
-        return {"status": "ok", "output": output}
+        return {"status": "ok", "output": output or "Todo al día, nada nuevo que subir"}
     except FileNotFoundError:
         raise HTTPException(status_code=501, detail="git/sudo no disponible en este sistema")
     except Exception as e:
