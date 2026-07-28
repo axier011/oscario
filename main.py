@@ -1251,6 +1251,16 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(default=""
 _visit_cooldown: dict[str, float] = {}
 _VISIT_COOLDOWN_SEC = 600  # 10 minutos
 
+# Referencia fuerte a tasks fire-and-forget (evita garbage collection en Python 3.12+)
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> None:
+    """Lanza una coroutine en background guardando referencia para evitar que el GC la elimine."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
 
 async def _notify_visit(ip: str) -> None:
     """Notifica por Telegram cuando alguien carga la web (con cooldown por IP)."""
@@ -1286,7 +1296,7 @@ if os.path.isdir(_DIST):
 @app.get("/", include_in_schema=False)
 async def serve_index(request: Request):
     ip = _get_client_ip(request)
-    asyncio.create_task(_notify_visit(ip))
+    _spawn(_notify_visit(ip))
     return FileResponse(_INDEX)
 
 
