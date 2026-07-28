@@ -6,7 +6,6 @@ import AddDeviceModal from './AddDeviceModal'
 import ScenesGrid     from './ScenesGrid'
 import HealthCard     from './HealthCard'
 import SensorGauge   from './SensorGauge'
-import type { Pin } from '../types'
 
 export default function ControlTab() {
   const { pins, visiblePins, lastWaterTemp, lastCpuTemp, setAllPins, addToPanel, renamePin, addToast } = useOsc()
@@ -15,7 +14,6 @@ export default function ControlTab() {
   const allPins   = Object.values(pins)
   const ctrlPins  = allPins.filter(p => CTRL_TYPES.has(p.pin_type))
   const visibleCtrlPins = ctrlPins.filter(p => visiblePins.includes(p.pin_number))
-  const sysPins   = allPins.filter(p => !CTRL_TYPES.has(p.pin_type))
 
   const onCount = visibleCtrlPins.filter(p => p.current_state === 1).length
   const total   = visibleCtrlPins.length
@@ -104,18 +102,6 @@ export default function ControlTab() {
           onAdd={handleAddDevice}
         />
       )}
-    </div>
-  )
-}
-
-function SysPin({ pin }: { pin: Pin }) {
-  const meta  = PM[pin.pin_type]
-  const color = meta?.c ?? '#4a5568'
-  return (
-    <div className="sys-pin-item">
-      <div className="sys-pin-dot" style={{ background: color }} />
-      <span className="sys-pin-name" title={pin.name}>{pin.name}</span>
-      <span className="sys-pin-type">{meta?.label ?? pin.pin_type}</span>
     </div>
   )
 }

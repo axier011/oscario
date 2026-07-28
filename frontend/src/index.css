@@ -88,18 +88,18 @@ input  { font-family: inherit; }
 #root  { height: 100%; display: flex; flex-direction: column; }
 
 /* ── Keyframes ───────────────────────────────────────────────────────────── */
-@keyframes pc-wave {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+@keyframes pc-fill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
 }
 @keyframes bub-up {
-  0%   { transform: translateY(0) scale(1); opacity: .7; }
-  100% { transform: translateY(-50px) scale(.4); opacity: 0; }
+  0%   { transform: translateY(0) scale(1); opacity: .8; }
+  100% { transform: translateY(-70px) scale(.3); opacity: 0; }
 }
 @keyframes food-drop {
-  0%   { transform: translateY(-16px); opacity: 0; }
-  30%  { opacity: 1; }
-  100% { transform: translateY(24px); opacity: 0; }
+  0%   { transform: translateY(-20px); opacity: 0; }
+  25%  { opacity: 1; }
+  100% { transform: translateY(36px); opacity: 0; }
 }
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -201,8 +201,12 @@ input  { font-family: inherit; }
 
 /* ── Page / main scroll ──────────────────────────────────────────────────── */
 .page {
-  flex: 1; overflow-y: auto; padding: 16px;
+  flex: 1; overflow-y: auto; padding: 24px 32px;
   scroll-behavior: smooth;
+}
+.page-inner {
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 /* ── Section headers ─────────────────────────────────────────────────────── */
@@ -237,17 +241,18 @@ input  { font-family: inherit; }
 /* ── Pin grid ────────────────────────────────────────────────────────────── */
 .pin-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 10px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: start;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 /* ── Pin card ────────────────────────────────────────────────────────────── */
 .pin-card {
   background: var(--card); border-radius: var(--r);
-  border: 1px solid var(--border); padding: 12px;
+  border: 1px solid var(--border); padding: 24px;
   cursor: pointer; transition: all var(--tr); user-select: none;
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-direction: column; gap: 14px;
   position: relative;
 }
 .pin-card:hover            { border-color: rgba(255,255,255,.18); background: var(--hover); }
@@ -261,9 +266,9 @@ input  { font-family: inherit; }
 .pc-row-between { display: flex; align-items: center; justify-content: space-between; }
 
 .pc-icon-circle {
-  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+  width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px; transition: all var(--tr);
+  font-size: 22px; transition: all var(--tr);
   background: var(--hover); color: var(--t2);
 }
 .pc-icon-circle.on {
@@ -271,14 +276,14 @@ input  { font-family: inherit; }
 }
 
 .pc-name {
-  font-size: .82rem; font-weight: 700; color: var(--t1);
+  font-size: 1.15rem; font-weight: 700; color: var(--t1);
   flex: 1; min-width: 0; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* iOS toggle */
 .ios-toggle {
-  width: 36px; height: 21px; border-radius: 11px;
+  width: 52px; height: 30px; border-radius: 15px;
   background: var(--t3); cursor: pointer;
   transition: background var(--tr);
   position: relative; flex-shrink: 0;
@@ -286,40 +291,56 @@ input  { font-family: inherit; }
 .ios-toggle.on { background: var(--green); }
 .ios-toggle::after {
   content: ''; position: absolute;
-  top: 2px; left: 2px;
-  width: 17px; height: 17px; border-radius: 50%;
+  top: 3px; left: 3px;
+  width: 24px; height: 24px; border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 4px rgba(0,0,0,.3);
   transition: transform var(--tr);
 }
-.ios-toggle.on::after { transform: translateX(15px); }
+.ios-toggle.on::after { transform: translateX(22px); }
 
 .pc-badge {
-  font-size: .65rem; font-weight: 800; padding: 2px 7px; border-radius: 100px;
+  font-size: .78rem; font-weight: 800; padding: 3px 10px; border-radius: 100px;
   text-transform: uppercase; letter-spacing: .04em;
 }
 .pc-badge.on  { background: rgba(67,168,104,.2); color: var(--green); }
 .pc-badge.off { background: rgba(255,255,255,.07); color: var(--t2); }
 
-.pc-meta { font-size: .67rem; color: var(--t2); font-family: var(--mono); }
+.pc-meta { font-size: .78rem; color: var(--t2); font-family: var(--mono); }
 
 .pc-rename-btn {
-  width: 24px; height: 24px; border-radius: var(--rs);
+  width: 30px; height: 30px; border-radius: var(--rs);
   display: flex; align-items: center; justify-content: center;
-  color: var(--t3); font-size: 11px; flex-shrink: 0;
+  color: var(--t3); font-size: 13px; flex-shrink: 0;
   transition: all var(--tr);
 }
 .pc-rename-btn:hover { color: var(--teal); background: var(--hover); }
 
-/* Animated bar */
+/* Bar: plain when OFF · bubbles when ON */
 .pc-bar {
-  height: 3px; border-radius: 2px; background: var(--t3);
-  overflow: hidden; margin-top: 2px;
+  height: 40px; border-radius: 8px; margin-top: 4px;
+  background: var(--hover);
+  position: relative; overflow: hidden;
 }
-.pc-bar.active {
-  background: linear-gradient(90deg, transparent, var(--teal), var(--green), var(--teal), transparent);
-  background-size: 200% 100%;
-  animation: pc-wave 2s linear infinite;
+/* Burbuja estándar: sube desde abajo (oxigenador, filtro…) */
+.pc-bubble {
+  position: absolute;
+  bottom: 4px;
+  left: var(--bx, 50%);
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--teal);
+  opacity: 0;
+  animation: bub-up var(--bs, 1.4s) ease-in infinite;
+  animation-delay: var(--bd, 0s);
+}
+/* Comedero → comida cayendo de arriba hacia abajo, color marrón */
+.pc-bubble.food {
+  bottom: auto;
+  top: 0;
+  background: #8B5E3C;
+  width: 9px; height: 9px;
+  animation-name: food-drop;
 }
 
 /* Add device dashed card */
@@ -335,6 +356,62 @@ input  { font-family: inherit; }
 }
 .add-dev-card i { font-size: 20px; }
 .add-dev-card span { font-size: .78rem; font-weight: 700; }
+
+/* ── Settings tab ────────────────────────────────────────────────────────── */
+.settings-page { max-width: 720px; }
+.settings-title {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 1.3rem; font-weight: 800; color: var(--t1);
+  margin-bottom: 24px;
+}
+.settings-title i { color: var(--teal); }
+.settings-grid { display: flex; flex-direction: column; gap: 14px; }
+.settings-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 20px 24px;
+  display: flex; align-items: center; gap: 20px;
+}
+.settings-card-icon {
+  width: 52px; height: 52px; border-radius: 14px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+}
+.settings-card-icon.restart { background: rgba(192,68,74,.15);  color: var(--red);   }
+.settings-card-icon.pull    { background: rgba(38,166,154,.15);  color: var(--teal);  }
+.settings-card-icon.push    { background: rgba(67,168,104,.15);  color: var(--green); }
+.settings-card-icon.build   { background: rgba(200,136,42,.15);  color: var(--amber); }
+.settings-card-body { flex: 1; min-width: 0; }
+.settings-card-name { font-size: 1rem; font-weight: 700; color: var(--t1); margin-bottom: 4px; }
+.settings-card-desc { font-size: .8rem; color: var(--t2); line-height: 1.5; }
+.settings-card-desc code {
+  font-family: var(--mono); font-size: .75rem;
+  background: var(--hover); padding: 1px 5px; border-radius: 4px;
+}
+.settings-output {
+  margin-top: 8px; padding: 8px 10px; border-radius: 6px;
+  font-family: var(--mono); font-size: .72rem; color: var(--green);
+  background: rgba(67,168,104,.08); border: 1px solid rgba(67,168,104,.2);
+  white-space: pre-wrap; word-break: break-all;
+}
+.settings-output.err {
+  color: var(--red); background: rgba(192,68,74,.08);
+  border-color: rgba(192,68,74,.2);
+}
+.settings-btn {
+  flex-shrink: 0; padding: 10px 20px; border-radius: var(--rs);
+  font-size: .85rem; font-weight: 700;
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid; transition: all var(--tr);
+}
+.settings-btn:disabled { opacity: .6; cursor: not-allowed; }
+.settings-btn.restart { color: var(--red);   border-color: var(--red);   background: rgba(192,68,74,.1); }
+.settings-btn.pull    { color: var(--teal);  border-color: var(--teal);  background: rgba(38,166,154,.1); }
+.settings-btn.push    { color: var(--green); border-color: var(--green); background: rgba(67,168,104,.1); }
+.settings-btn.build   { color: var(--amber); border-color: var(--amber); background: rgba(200,136,42,.1); }
+.settings-btn.restart:not(:disabled):hover { background: rgba(192,68,74,.22); }
+.settings-btn.pull:not(:disabled):hover    { background: rgba(38,166,154,.22); }
+.settings-btn.push:not(:disabled):hover    { background: rgba(67,168,104,.22); }
+.settings-btn.build:not(:disabled):hover   { background: rgba(200,136,42,.22); }
 
 /* ── Scenes grid ─────────────────────────────────────────────────────────── */
 .scenes-grid {
@@ -462,8 +539,8 @@ input  { font-family: inherit; }
   border: 1px solid rgba(255,255,255,.1);
 }
 html[data-theme="light"] .gpio-connector {
-  background: #dde1ea;
-  border-color: rgba(0,0,0,.12);
+  background: #c8cdd8;
+  border-color: rgba(0,0,0,.18);
 }
 html[data-theme="light"] .gpio-map {
   background: var(--surface);
@@ -472,11 +549,11 @@ html[data-theme="light"] .gpio-map-title {
   color: var(--t1);
 }
 html[data-theme="light"] .gpio-row-label {
-  color: var(--t1);
+  color: var(--t1); font-weight: 600;
 }
 html[data-theme="light"] .gpio-pin-dot {
-  color: rgba(0,0,0,.5);
-  border-color: rgba(0,0,0,.15);
+  color: rgba(0,0,0,.7);
+  border-color: rgba(0,0,0,.2);
 }
 .gpio-row {
   display: grid;

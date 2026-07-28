@@ -31,7 +31,7 @@ export interface LogsResponse {
 // ─── UI enums / unions ────────────────────────────────────────────────────────
 export type WsStatus = 'connecting' | 'connected' | 'disconnected'
 export type Theme    = 'light' | 'dark' | 'auto'
-export type TabId    = 'ctrl' | 'map' | 'hist'
+export type TabId    = 'ctrl' | 'map' | 'hist' | 'settings'
 export type ToastType = 'ok' | 'on' | 'off' | 'error'
 
 export interface ToastItem {

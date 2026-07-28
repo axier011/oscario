@@ -777,6 +777,102 @@ async def restart_service():
         raise HTTPException(status_code=501, detail="systemctl no disponible en este sistema")
 
 
+@app.post("/api/v1/system/git-pull", summary="git pull en el directorio de trabajo")
+async def git_pull():
+    import subprocess
+    wd = os.path.dirname(os.path.abspath(__file__))
+    try:
+        # Asegurar safe.directory para axier
+        subprocess.run(
+            ["sudo", "-u", "axier", "git", "config", "--global", "--add", "safe.directory", wd],
+            capture_output=True
+        )
+        # Convertir remote HTTPS → SSH si hace falta
+        url_r = subprocess.run(
+            ["sudo", "-u", "axier", "git", "-C", wd, "remote", "get-url", "origin"],
+            capture_output=True, text=True
+        )
+        remote = url_r.stdout.strip()
+        if remote.startswith("https://github.com/"):
+            subprocess.run(
+                ["sudo", "-u", "axier", "git", "-C", wd, "remote", "set-url", "origin",
+                 remote.replace("https://github.com/", "git@github.com:")],
+                capture_output=True
+            )
+        result = subprocess.run(
+            ["sudo", "-u", "axier", "git", "-C", wd, "pull"],
+            capture_output=True, text=True, timeout=30
+        )
+        output = (result.stdout + result.stderr).strip()
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=output or "Error en git pull")
+        return {"status": "ok", "output": output}
+    except FileNotFoundError:
+        raise HTTPException(status_code=501, detail="git/sudo no disponible en este sistema")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/system/git-push", summary="git push al repositorio remoto")
+async def git_push():
+    import subprocess
+    wd = os.path.dirname(os.path.abspath(__file__))
+    try:
+        subprocess.run(
+            ["sudo", "-u", "axier", "git", "config", "--global", "--add", "safe.directory", wd],
+            capture_output=True
+        )
+        url_r = subprocess.run(
+            ["sudo", "-u", "axier", "git", "-C", wd, "remote", "get-url", "origin"],
+            capture_output=True, text=True
+        )
+        remote = url_r.stdout.strip()
+        if remote.startswith("https://github.com/"):
+            subprocess.run(
+                ["sudo", "-u", "axier", "git", "-C", wd, "remote", "set-url", "origin",
+                 remote.replace("https://github.com/", "git@github.com:")],
+                capture_output=True
+            )
+        result = subprocess.run(
+            ["sudo", "-u", "axier", "git", "-C", wd, "push"],
+            capture_output=True, text=True, timeout=30
+        )
+        output = (result.stdout + result.stderr).strip()
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=output or "Error en git push")
+        return {"status": "ok", "output": output}
+    except FileNotFoundError:
+        raise HTTPException(status_code=501, detail="git/sudo no disponible en este sistema")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/system/npm-build", summary="npm run build en frontend/")
+async def npm_build():
+    import subprocess
+    base = os.path.dirname(os.path.abspath(__file__))
+    frontend_dir = os.path.join(base, "frontend")
+    # Cargar nvm explícitamente y ejecutar como axier
+    cmd = (
+        'export NVM_DIR="/home/axier/.nvm"; '
+        '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; '
+        f'cd \'{frontend_dir}\' && npm run build'
+    )
+    try:
+        result = subprocess.run(
+            ["sudo", "-u", "axier", "bash", "-c", cmd],
+            capture_output=True, text=True, timeout=300
+        )
+        output = (result.stdout + result.stderr).strip()
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=output or "Error en npm run build")
+        return {"status": "ok", "output": output}
+    except FileNotFoundError:
+        raise HTTPException(status_code=501, detail="sudo/bash no disponible")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ─────────────────────────────────────────────────────────────────
 # PUNTO DE ENTRADA
 # ─────────────────────────────────────────────────────────────────

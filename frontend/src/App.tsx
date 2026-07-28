@@ -4,6 +4,7 @@ import TopBar      from './components/TopBar'
 import ControlTab  from './components/ControlTab'
 import GpioMap     from './components/GpioMap'
 import LogHistory  from './components/LogHistory'
+import SettingsTab from './components/SettingsTab'
 import Toast       from './components/Toast'
 import type { TabId } from './types'
 
@@ -46,12 +47,22 @@ export default function App() {
             <i className="fa-solid fa-clock-rotate-left" />
             <span>Historial</span>
           </button>
+          <button
+            className={`tab-btn${activeTab === 'settings' ? ' active' : ''}`}
+            onClick={() => switchTab('settings')}
+          >
+            <i className="fa-solid fa-gear" />
+            <span>Ajustes</span>
+          </button>
         </nav>
 
         <main className="page">
-          {activeTab === 'ctrl' && <ControlTab />}
-          {activeTab === 'map'  && <GpioMap />}
-          {activeTab === 'hist' && <LogHistory />}
+          <div className="page-inner">
+            {activeTab === 'ctrl'     && <ControlTab />}
+            {activeTab === 'map'      && <GpioMap />}
+            {activeTab === 'hist'     && <LogHistory />}
+            {activeTab === 'settings' && <SettingsTab />}
+          </div>
         </main>
 
         <Toast />

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useOsc } from '../hooks/useOscario'
 import { PM, faFor } from '../constants'
+import { apiSetPin } from '../api'
 import ContextMenu  from './ContextMenu'
 import RenameModal  from './RenameModal'
 
@@ -10,16 +11,31 @@ export default function PinCard({ pinNumber }: Props) {
   const { pins, togglePin, removeFromPanel, renamePin, addToast } = useOsc()
   const pin = pins[pinNumber]
 
+  // Declarado antes de los callbacks para evitar TDZ
+  const isFeed = pin?.name.toLowerCase().includes('comedero') ?? false
+
   const [ctxPos,     setCtxPos]     = useState<{ x: number; y: number } | null>(null)
   const [showRename, setShowRename] = useState(false)
 
   const handleClick = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!pin) return
+    if (isFeed) {
+      try { await apiSetPin(11, 1) } catch { /* ignore */ }
+      addToast('on', 'Luz Blanca encendida')
+      await new Promise<void>(r => setTimeout(r, 400))
+      try {
+        await apiSetPin(pinNumber, 1)
+        addToast('on', `${pin.name}: impulso enviado`)
+        await new Promise<void>(r => setTimeout(r, 1000))
+        await apiSetPin(pinNumber, 0)
+      } catch { /* ignore */ }
+      return
+    }
     await togglePin(pinNumber)
     addToast(pin.current_state === 1 ? 'off' : 'on',
       `${pin.name} ${pin.current_state === 1 ? 'apagado' : 'encendido'}`)
-  }, [pin, pinNumber, togglePin, addToast])
+  }, [pin, pinNumber, isFeed, togglePin, addToast])
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -30,10 +46,11 @@ export default function PinCard({ pinNumber }: Props) {
   const handleToggleFromCtx = useCallback(async () => {
     setCtxPos(null)
     if (!pin) return
+    if (isFeed) { await handleClick({ stopPropagation: () => {} } as React.MouseEvent); return }
     await togglePin(pinNumber)
     addToast(pin.current_state === 1 ? 'off' : 'on',
       `${pin.name} ${pin.current_state === 1 ? 'apagado' : 'encendido'}`)
-  }, [pin, pinNumber, togglePin, addToast])
+  }, [pin, pinNumber, isFeed, handleClick, togglePin, addToast])
 
   const handleRemove = useCallback(() => {
     setCtxPos(null)
@@ -94,7 +111,19 @@ export default function PinCard({ pinNumber }: Props) {
           {bcmStr}PIN {pin.pin_number}
         </div>
 
-        <div className={`pc-bar${isOn ? ' active' : ''}`} />
+        <div className={`pc-bar${isOn ? ' active' : ''}`}>
+          {isOn && [0,1,2,3,4,5,6].map(i => (
+            <span
+              key={i}
+              className={`pc-bubble${isFeed ? ' food' : ''}`}
+              style={{
+                '--bx': `${5 + i * 13}%`,
+                '--bd': `${i * 0.30}s`,
+                '--bs': `${0.9 + (i % 3) * 0.35}s`,
+              } as React.CSSProperties}
+            />
+          ))}
+        </div>
       </div>
 
       {ctxPos && (

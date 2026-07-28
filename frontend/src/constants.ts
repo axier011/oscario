@@ -41,7 +41,7 @@ export const SCENES: Scene[] = [
     label: 'Día',
     icon:  'fa-sun',
     color: 'var(--amber)',
-    on:    ['luz', 'filtro', 'calentador', 'bomba', 'oxigenador'],
+    on:    ['luz', 'filtro', 'calentador', 'oxigenador'],
     off:   ['comedero'],
   },
   {
@@ -49,24 +49,26 @@ export const SCENES: Scene[] = [
     label: 'Noche',
     icon:  'fa-moon',
     color: 'var(--blue)',
-    on:    ['filtro', 'calentador'],
-    off:   ['luz', 'oxigenador'],
+    on:    ['filtro', 'calentador', 'oxigenador'],
+    off:   ['luz', 'comedero'],
   },
   {
+    // Enciende filtro+calentador+oxigenador+luz blanca. Impulso comedero en activateScene.
     id:    'feed',
     label: 'Alimentación',
     icon:  'fa-utensils',
     color: 'var(--teal)',
-    on:    ['comedero'],
+    on:    ['filtro', 'calentador', 'oxigenador', 'blanca'],
     off:   [],
   },
   {
+    // Apaga todo menos luz blanca.
     id:    'maint',
     label: 'Mantenimiento',
     icon:  'fa-wrench',
     color: 'var(--purple)',
-    on:    ['bomba', 'filtro'],
-    off:   ['luz', 'calentador', 'oxigenador', 'comedero'],
+    on:    ['blanca'],
+    off:   ['azul', 'filtro', 'calentador', 'oxigenador', 'bomba', 'motor', 'comedero'],
   },
 ]
 

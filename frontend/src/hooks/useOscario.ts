@@ -45,15 +45,17 @@ export function useOscario(): OscarioState {
 
   const [visiblePins, setVisiblePinsState] = useState<number[]>(() => {
     try {
+      const ver    = localStorage.getItem('osc-visible-v')
       const stored = localStorage.getItem('osc-visible')
-      if (stored) return JSON.parse(stored) as number[]
+      if (ver === '2' && stored) return JSON.parse(stored) as number[]
     } catch { /* ignore */ }
     return DEFAULT_VISIBLE
   })
 
   // Persist visiblePins to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('osc-visible', JSON.stringify(visiblePins))
+    localStorage.setItem('osc-visible',   JSON.stringify(visiblePins))
+    localStorage.setItem('osc-visible-v', '2')
   }, [visiblePins])
 
   // ── Toast helpers ────────────────────────────────────────────────────────────
@@ -215,6 +217,22 @@ export function useOscario(): OscarioState {
         if (shouldOn  && pin.current_state === 0) await apiSetPin(pin.pin_number, 1)
         if (shouldOff && pin.current_state === 1) await apiSetPin(pin.pin_number, 0)
       } catch { /* continue */ }
+    }
+    // Alimentación: enciende luz blanca primero, luego impulso comedero
+    if (sceneId === 'feed') {
+      const luzBlanca = Object.values(pins).find(p => p.name.toLowerCase().includes('blanca'))
+      const comedero  = Object.values(pins).find(p => p.name.toLowerCase().includes('comedero'))
+      if (luzBlanca && luzBlanca.current_state === 0) {
+        try { await apiSetPin(luzBlanca.pin_number, 1) } catch { /* ignore */ }
+      }
+      if (comedero) {
+        await new Promise<void>(r => setTimeout(r, 500))
+        try {
+          await apiSetPin(comedero.pin_number, 1)
+          await new Promise<void>(r => setTimeout(r, 1000))
+          await apiSetPin(comedero.pin_number, 0)
+        } catch { /* ignore */ }
+      }
     }
   }, [pins])
 
