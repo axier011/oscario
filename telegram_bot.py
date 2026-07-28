@@ -33,6 +33,7 @@ _app: Application | None = None
 _toggle_fn: Callable[..., Awaitable[dict]] | None = None
 _get_db_ctx: Callable | None = None
 _allowed: set[int] = set()
+_last_alert: dict[str, float] = {}  # cooldown tracking para notificaciones
 
 # ── Mapas de nombre → pin_number ──────────────────────────────────
 # Acepta tanto el nombre corto como el nombre completo de la DB
@@ -109,6 +110,64 @@ VISIBLE_PINS = [11, 13, 15, 16, 18, 22, 29, 31]
 
 
 # ── Utilidades ────────────────────────────────────────────────────
+
+def get_alert_config() -> dict:
+    """Lee la sección [alerts] de telegram.cfg."""
+    import configparser as _cp
+    cfg = _cp.ConfigParser()
+    cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "telegram.cfg")
+    cfg.read(cfg_path, encoding="utf-8")
+
+    def _float(key: str, fallback: float) -> float:
+        try:
+            return cfg.getfloat("alerts", key, fallback=fallback)
+        except Exception:
+            return fallback
+
+    def _int(key: str, fallback: int) -> int:
+        try:
+            return cfg.getint("alerts", key, fallback=fallback)
+        except Exception:
+            return fallback
+
+    raw_pins = cfg.get("alerts", "critical_pins", fallback="").strip()
+    critical_pins = [int(p.strip()) for p in raw_pins.split(",") if p.strip().isdigit()]
+
+    return {
+        "temp_sensor":         cfg.get("alerts", "temp_sensor", fallback="temperatura").strip(),
+        "temp_min":            _float("temp_min", 24.0),
+        "temp_max":            _float("temp_max", 28.0),
+        "critical_pins":       critical_pins,
+        "alert_if_off_minutes":_int("alert_if_off_minutes", 60),
+        "cooldown_minutes":    _int("cooldown_minutes", 30),
+    }
+
+
+def should_alert(key: str, cooldown_minutes: int) -> bool:
+    """True si ha pasado suficiente tiempo desde la última alerta de este tipo."""
+    import time
+    now = time.time()
+    if now - _last_alert.get(key, 0) >= cooldown_minutes * 60:
+        _last_alert[key] = now
+        return True
+    return False
+
+
+def reset_alert(key: str) -> None:
+    """Elimina el cooldown de una alerta (p.ej. cuando el pin vuelve a ON)."""
+    _last_alert.pop(key, None)
+
+
+async def notify_all(message: str) -> None:
+    """Envía un mensaje a todos los chat_ids autorizados."""
+    if _app is None:
+        return
+    for chat_id in _allowed:
+        try:
+            await _app.bot.send_message(chat_id=chat_id, text=message, parse_mode="Markdown")
+        except Exception as exc:
+            logger.error(f"Error enviando notificación a {chat_id}: {exc}")
+
 
 def _load_config() -> tuple[str, set[int]]:
     """Lee token y allowed_chats de telegram.cfg."""

@@ -339,6 +339,94 @@ async def toggle_pin(
 _prev_button_states: dict[int, int] = {}
 
 
+async def monitor_alerts() -> None:
+    """
+    Monitoriza temperatura y pines críticos cada 5 minutos.
+    Envía notificaciones por Telegram si se detectan anomalías.
+    """
+    await asyncio.sleep(60)  # Esperar a que el sistema arranque del todo
+    while True:
+        try:
+            from telegram_bot import notify_all, should_alert, reset_alert, get_alert_config
+            cfg = get_alert_config()
+            cooldown = cfg["cooldown_minutes"]
+
+            async with get_db() as db:
+                # ── Temperatura ────────────────────────────────────────
+                if cfg["temp_sensor"]:
+                    async with db.execute(
+                        "SELECT value FROM sensor_data WHERE sensor_name = ? "
+                        "ORDER BY created_at DESC LIMIT 1",
+                        (cfg["temp_sensor"],),
+                    ) as cur:
+                        temp_row = await cur.fetchone()
+
+                    if temp_row:
+                        temp = temp_row["value"]
+                        if temp < cfg["temp_min"]:
+                            if should_alert("temp_low", cooldown):
+                                await notify_all(
+                                    f"🌡️ *ALERTA — Temperatura baja*\n"
+                                    f"Temperatura: *{temp:.1f}°C* (mínimo {cfg['temp_min']}°C)\n"
+                                    f"Revisa el calentador."
+                                )
+                        elif temp > cfg["temp_max"]:
+                            if should_alert("temp_high", cooldown):
+                                await notify_all(
+                                    f"🌡️ *ALERTA — Temperatura alta*\n"
+                                    f"Temperatura: *{temp:.1f}°C* (máximo {cfg['temp_max']}°C)\n"
+                                    f"Revisa el calentador."
+                                )
+
+                # ── Pines críticos ─────────────────────────────────────
+                if cfg["critical_pins"]:
+                    ph = ",".join("?" * len(cfg["critical_pins"]))
+                    async with db.execute(
+                        f"SELECT pin_number, name, current_state FROM pin_configurations "
+                        f"WHERE pin_number IN ({ph})",
+                        cfg["critical_pins"],
+                    ) as cur:
+                        pin_rows = [dict(r) for r in await cur.fetchall()]
+
+                    for pin in pin_rows:
+                        key = f"pin_off_{pin['pin_number']}"
+                        if pin["current_state"] == 0:
+                            # Cuánto lleva apagado según gpio_logs
+                            async with db.execute(
+                                "SELECT created_at FROM gpio_logs "
+                                "WHERE pin_number = ? AND new_state = 0 "
+                                "ORDER BY created_at DESC LIMIT 1",
+                                (pin["pin_number"],),
+                            ) as cur:
+                                log_row = await cur.fetchone()
+
+                            if log_row:
+                                from datetime import datetime, timezone
+                                off_ts = log_row["created_at"].replace("Z", "+00:00")
+                                try:
+                                    off_dt = datetime.fromisoformat(off_ts).replace(tzinfo=timezone.utc)
+                                except ValueError:
+                                    off_dt = datetime.fromisoformat(log_row["created_at"]).replace(tzinfo=timezone.utc)
+                                minutes_off = (datetime.now(timezone.utc) - off_dt).total_seconds() / 60
+                                if minutes_off >= cfg["alert_if_off_minutes"]:
+                                    if should_alert(key, cooldown):
+                                        await notify_all(
+                                            f"⚠️ *ALERTA — Dispositivo apagado*\n"
+                                            f"*{pin['name']}* lleva {int(minutes_off)} minutos apagado."
+                                        )
+                        else:
+                            reset_alert(key)  # Está ON → limpiar cooldown
+
+        except ImportError:
+            pass  # Telegram no configurado
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.error(f"Error en monitor_alerts: {exc}")
+
+        await asyncio.sleep(300)  # Revisar cada 5 minutos
+
+
 async def poll_physical_buttons() -> None:
     """
     Monitoriza en background los pines configurados como GPIO_INPUT.
@@ -385,6 +473,7 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 AquaPi iniciando...")
     await init_db()
     task = asyncio.create_task(poll_physical_buttons())
+    alert_task = asyncio.create_task(monitor_alerts())
     # ── Telegram bot (opcional — requiere telegram.cfg con token) ──
     try:
         from telegram_bot import start_telegram_bot
@@ -396,6 +485,7 @@ async def lifespan(app: FastAPI):
     logger.info("✅ AquaPi listo para recibir conexiones")
     yield
     task.cancel()
+    alert_task.cancel()
     try:
         from telegram_bot import stop_telegram_bot
         await stop_telegram_bot()
