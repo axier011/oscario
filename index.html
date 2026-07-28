@@ -515,6 +515,26 @@
     #tab-hist.active { display:block; padding:20px 22px; }
     @media(max-width:768px){ #tab-hist.active{padding:14px;} }
     @media(max-width:480px){ #tab-hist.active{padding:10px;} }
+    /* ── ADD DEVICE CARD ── */
+    .add-device-card {
+      border:2px dashed var(--border); border-radius:14px; padding:16px;
+      cursor:pointer; display:flex; flex-direction:column; align-items:center;
+      justify-content:center; gap:8px; min-height:140px;
+      transition:all var(--tr); color:var(--t3); background:transparent;
+    }
+    .add-device-card:hover { border-color:var(--teal); color:var(--teal); background:rgba(38,166,154,.05); }
+    .add-device-card i { font-size:22px; }
+    .add-device-card span { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; }
+    /* ── ADD DEVICE MODAL ── */
+    .add-dev-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:700; display:flex; align-items:center; justify-content:center; animation:fadeIn .15s ease; }
+    .add-dev-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:20px; width:340px; max-height:80vh; overflow-y:auto; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+    .add-dev-title { font-size:14px; font-weight:800; margin-bottom:12px; display:flex; align-items:center; gap:7px; }
+    .avail-list { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+    .avail-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1.5px solid var(--border); border-radius:9px; cursor:pointer; transition:all var(--tr); }
+    .avail-item:hover { border-color:var(--teal); background:rgba(38,166,154,.06); }
+    .avail-item-ico { width:34px; height:34px; border-radius:50%; background:rgba(38,166,154,.12); display:flex; align-items:center; justify-content:center; color:var(--teal); font-size:13px; flex-shrink:0; }
+    .avail-item-name { font-size:13px; font-weight:700; }
+    .avail-item-sub  { font-size:9px; color:var(--t3); font-family:var(--mono); margin-top:1px; }
   </style>
 </head>
 <body>
@@ -804,6 +824,8 @@ function updateHealth(){
 }
 
 let pins={}, logs=[], events=0, ws, wsT, wsA=0, lastWaterTemp=null;
+let VISIBLE_PINS=JSON.parse(localStorage.getItem('osc-visible')||'null')||[17,27,22,24,25,5];
+function saveVisible(){ localStorage.setItem('osc-visible',JSON.stringify(VISIBLE_PINS)); }
 
 /* ── CLOCK ── */
 function tick(){
@@ -837,7 +859,7 @@ function buildControlPage(){
   cardEl.innerHTML=''; infoEl.innerHTML='';
 
   const sorted=Object.values(pins).sort((a,b)=>a.pin_number-b.pin_number);
-  sorted.filter(p=>CTRL.has(p.pin_type)).forEach(p=>{
+  sorted.filter(p=>CTRL.has(p.pin_type)&&VISIBLE_PINS.includes(p.pin_number)).forEach(p=>{
     const m=PM[p.pin_type]||PM.GROUND;
     const on=parseInt(p.current_state)===1;
     const fa=faFor(p.name);
@@ -864,6 +886,12 @@ function buildControlPage(){
     div.addEventListener('contextmenu',e=>{e.preventDefault();showCtxMenu(e,p.pin_number);});
     cardEl.appendChild(div);
   });
+  // Botón añadir dispositivo
+  const addBtn=document.createElement('div');
+  addBtn.className='add-device-card';
+  addBtn.innerHTML='<i class="fa-solid fa-plus"></i><span>Añadir dispositivo</span>';
+  addBtn.addEventListener('click', showAddDeviceModal);
+  cardEl.appendChild(addBtn);
 
   sorted.filter(p=>!CTRL.has(p.pin_type)).forEach(p=>{
     const m=PM[p.pin_type]||PM.GROUND;
@@ -1002,6 +1030,9 @@ function showCtxMenu(e, n){
       <div class="ctx-sep"></div>
     `:''}
     <div class="ctx-item" onclick="openRenameModal()"><i class="fa-solid fa-pencil"></i> Renombrar pin…</div>
+    ${ctrl&&VISIBLE_PINS.includes(n)?`
+      <div class="ctx-item danger" onclick="removeFromPanel(${n})"><i class="fa-solid fa-eye-slash"></i> Quitar del panel</div>
+    `:''}
     <div class="ctx-sep"></div>
     <div class="ctx-item" style="color:var(--t3);cursor:default;font-size:11px"><i class="fa-solid fa-microchip"></i> ${m.label} &middot; BCM ${p.bcm_number>=0?p.bcm_number:'N/A'}</div>
   `;
@@ -1018,6 +1049,97 @@ function showCtxMenu(e, n){
 }
 function closeCtxOnce(){ closeCtxMenu(); document.removeEventListener('click', closeCtxOnce); }
 function closeCtxMenu(){ document.getElementById('ctx-menu').style.display='none'; }
+
+function removeFromPanel(n){
+  closeCtxMenu();
+  VISIBLE_PINS=VISIBLE_PINS.filter(x=>x!==n);
+  saveVisible();
+  buildControlPage(); updateStats(); buildScenes(); updateHealth();
+  toast(`Pin ${n} quitado del panel`,'ok');
+}
+
+/* ── ADD DEVICE MODAL ── */
+let _addDev={ov:null,step:1,pinNum:null};
+
+function showAddDeviceModal(){
+  const available=Object.values(pins).filter(p=>CTRL.has(p.pin_type)&&!VISIBLE_PINS.includes(p.pin_number));
+  if(!available.length){ toast('No hay GPIOs disponibles para añadir','ok'); return; }
+  _addDev.step=1; _addDev.pinNum=null;
+  if(!_addDev.ov){
+    const ov=document.createElement('div');
+    ov.className='add-dev-overlay';
+    ov.addEventListener('click',e=>{ if(e.target===ov) closeAddDevModal(); });
+    document.body.appendChild(ov);
+    _addDev.ov=ov;
+  }
+  renderAddDevModal(available);
+}
+
+function renderAddDevModal(available){
+  const ov=_addDev.ov; if(!ov) return;
+  if(_addDev.step===1){
+    ov.innerHTML=`<div class="add-dev-box">
+      <div class="add-dev-title"><i class="fa-solid fa-microchip" style="color:var(--teal)"></i> Selecciona un GPIO disponible</div>
+      <div class="avail-list">
+        ${available.map(p=>{
+          const mt=PM[p.pin_type]||PM.GROUND;
+          return `<div class="avail-item" onclick="pickAddPin(${p.pin_number})">
+            <div class="avail-item-ico"><i class="fa-solid fa-plug"></i></div>
+            <div><div class="avail-item-name">${p.name}</div><div class="avail-item-sub">${mt.label} · PIN ${p.pin_number} · BCM ${p.bcm_number>=0?p.bcm_number:'N/A'}</div></div>
+            <i class="fa-solid fa-chevron-right" style="margin-left:auto;color:var(--t3);font-size:10px"></i>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;justify-content:flex-end">
+        <button class="modal-btn cancel" onclick="closeAddDevModal()">Cancelar</button>
+      </div>
+    </div>`;
+  } else {
+    const p=pins[_addDev.pinNum];
+    const mt=PM[p.pin_type]||PM.GROUND;
+    ov.innerHTML=`<div class="add-dev-box">
+      <div class="add-dev-title"><i class="fa-solid fa-tag" style="color:var(--teal)"></i> Nombra el dispositivo</div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:14px;font-family:var(--mono)">${mt.label} · PIN ${p.pin_number} · BCM ${p.bcm_number>=0?p.bcm_number:'N/A'}</div>
+      <label style="display:block;font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:7px">Nombre del dispositivo</label>
+      <input id="add-dev-name" type="text" maxlength="64" placeholder="Ej: Bomba 2, UV, Calefactor…"
+        style="width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:7px;color:var(--t1);font-family:var(--font);font-size:14px;font-weight:700;padding:9px 11px;outline:none;margin-bottom:14px"
+        onkeydown="if(event.key==='Enter')confirmAddDevice();if(event.key==='Escape')closeAddDevModal()"/>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="modal-btn cancel" onclick="_addDev.step=1;showAddDeviceModal()"><i class="fa-solid fa-arrow-left"></i> Atrás</button>
+        <button class="modal-btn confirm" style="background:var(--teal)" onclick="confirmAddDevice()"><i class="fa-solid fa-check"></i> Añadir</button>
+      </div>
+    </div>`;
+    setTimeout(()=>{ const inp=document.getElementById('add-dev-name'); if(inp){inp.value=p.name.startsWith('GPIO')?'':p.name; inp.focus(); inp.select();} },60);
+  }
+}
+
+function pickAddPin(pinNum){
+  _addDev.step=2; _addDev.pinNum=pinNum;
+  renderAddDevModal();
+}
+
+async function confirmAddDevice(){
+  const inp=document.getElementById('add-dev-name');
+  const name=(inp?.value||'').trim();
+  if(!name){ inp?.focus(); toast('Escribe un nombre','error'); return; }
+  const pinNum=_addDev.pinNum;
+  try{
+    const r=await fetch(`${API}/gpio/${pinNum}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    if(r.ok){
+      const d=await r.json();
+      pins[pinNum].name=d.pin.name;
+      VISIBLE_PINS.push(pinNum);
+      saveVisible();
+      closeAddDevModal();
+      buildControlPage(); buildMatrix(); updateStats(); buildScenes(); updateHealth();
+      toast(`✓ ${name} añadido al panel`,'ok');
+    } else { const e=await r.json(); toast(e.detail||'Error al renombrar','error'); }
+  }catch{ toast('Sin conexión','error'); }
+}
+
+function closeAddDevModal(){
+  if(_addDev.ov){ _addDev.ov.remove(); _addDev.ov=null; }
+}
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeCtxMenu(); closeRenameModal(); } });
 
 function ctxToggle(){
