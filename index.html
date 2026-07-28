@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AquaPi — Panel de Control</title>
+  <title>Oscario — Panel de Control</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet" />
@@ -440,6 +440,46 @@
     .modal-btn.cancel:hover { background:var(--hover); color:var(--t1); }
     .modal-btn.confirm { background:var(--red); color:#fff; }
     .modal-btn.confirm:hover { filter:brightness(1.1); }
+
+    /* ── PIN CARD BAR ── */
+    .pc-bar { height:22px; border-radius:5px; margin-top:8px; position:relative; overflow:hidden; background:rgba(255,255,255,.04); flex-shrink:0; }
+    .pin-card.state-on .pc-bar::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,transparent,var(--pc),rgba(255,255,255,.35),var(--pc),transparent); background-size:300% 100%; animation:pc-wave 2s linear infinite; border-radius:5px; }
+    @keyframes pc-wave { 0%{background-position:200% center}100%{background-position:-100% center} }
+    .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::before,
+    .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::after { content:''; position:absolute; border-radius:50%; background:rgba(255,255,255,.22); }
+    .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::before { width:4px;height:4px;bottom:2px;left:22%; animation:bub-up 2.4s ease-in infinite; }
+    .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::after  { width:3px;height:3px;bottom:2px;left:60%; animation:bub-up 2.9s ease-in .85s infinite; }
+    @keyframes bub-up { 0%{transform:translateY(0) scale(1);opacity:.6}100%{transform:translateY(-24px) scale(.3);opacity:0} }
+    .pin-card.comedero-pin:not(.state-on) .pc-bar::before,
+    .pin-card.comedero-pin:not(.state-on) .pc-bar::after { content:''; position:absolute; width:3px;height:3px;border-radius:2px;background:var(--amber); }
+    .pin-card.comedero-pin:not(.state-on) .pc-bar::before { left:28%;top:0; animation:food-drop 1.8s ease-in infinite; }
+    .pin-card.comedero-pin:not(.state-on) .pc-bar::after  { left:66%;top:0; animation:food-drop 1.8s ease-in .9s infinite; }
+    @keyframes food-drop { 0%{transform:translateY(-2px);opacity:.8}100%{transform:translateY(25px);opacity:0} }
+    html[data-theme="light"] .pc-bar { background:rgba(0,0,0,.05); }
+    html[data-theme="light"] .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::before,
+    html[data-theme="light"] .pin-card:not(.state-on):not(.comedero-pin) .pc-bar::after { background:rgba(38,166,154,.3); }
+
+    /* ── ESCENAS ── */
+    .scenes-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(175px,1fr)); gap:9px; margin-bottom:20px; }
+    .scene-card { background:var(--surface); border:1.5px solid var(--border); border-radius:var(--r); padding:13px 14px; cursor:pointer; transition:all var(--tr); }
+    .scene-card:hover { background:var(--hover); border-color:var(--sc,var(--blue)); }
+    .scene-card.s-active { border-color:var(--sc,var(--blue)); background:var(--hover); }
+    .scene-ico { width:30px;height:30px;border-radius:7px;background:rgba(255,255,255,.07);display:flex;align-items:center;justify-content:center;font-size:13px;margin-bottom:8px;color:var(--sc,var(--blue));transition:all var(--tr); }
+    .scene-card.s-active .scene-ico { background:var(--sc,var(--blue));color:#fff; }
+    .scene-name { font-size:13px;font-weight:700;margin-bottom:3px;transition:color var(--tr); }
+    .scene-card.s-active .scene-name { color:var(--sc,var(--blue)); }
+    .scene-desc { font-size:10px;color:var(--t3);line-height:1.4; }
+    html[data-theme="light"] .scene-ico { background:rgba(0,0,0,.06); }
+    @media(max-width:768px){ .scenes-grid{grid-template-columns:repeat(2,1fr);} }
+    @media(max-width:480px){ .scenes-grid{gap:7px;} }
+
+    /* ── SALUD ── */
+    .health-pill { display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:9px;font-weight:700;border:1px solid;margin:1px; }
+
+    /* ── HISTORIAL PAGE ── */
+    #tab-hist.active { display:block; padding:20px 22px; }
+    @media(max-width:768px){ #tab-hist.active{padding:14px;} }
+    @media(max-width:480px){ #tab-hist.active{padding:10px;} }
   </style>
 </head>
 <body>
@@ -448,7 +488,7 @@
 <header class="topbar">
   <div class="brand">
     <div class="brand-ico"><i class="fa-solid fa-fish"></i></div>
-    <span class="brand-name">AquaPi</span>
+    <span class="brand-name">Oscario</span>
     <span class="brand-sep">/</span>
     <span class="brand-sub">Raspberry Pi 4B</span>
   </div>
@@ -463,8 +503,9 @@
 
 <!-- TABS -->
 <div class="tabs">
-  <div class="tab active" onclick="showTab('ctrl',this)"><i class="fa-solid fa-sliders"></i> Control GPIO</div>
-  <div class="tab" onclick="showTab('map',this)"><i class="fa-solid fa-microchip"></i> Mapa de Pines</div>
+  <div class="tab active" onclick="showTab('ctrl',this)"><i class="fa-solid fa-sliders"></i> Control</div>
+  <div class="tab" onclick="showTab('map',this)"><i class="fa-solid fa-microchip"></i> Mapa GPIO</div>
+  <div class="tab" onclick="showTab('hist',this)"><i class="fa-solid fa-clock-rotate-left"></i> Historial</div>
 </div>
 
 <!-- ══ TAB CONTROL ══ -->
@@ -500,6 +541,9 @@
 
       <div class="sec-lbl" style="margin-top:6px"><i class="fa-solid fa-lock" style="color:var(--t3)"></i> Pines de sistema</div>
       <div class="info-pins" id="info-pins"></div>
+
+      <div class="sec-lbl" style="margin-top:18px"><i class="fa-solid fa-layer-group" style="color:var(--purple)"></i> Escenas</div>
+      <div class="scenes-grid" id="scenes-grid"></div>
     </div>
 
     <div class="right-stack">
@@ -532,24 +576,22 @@
         </div>
       </div>
 
-      <!-- Log -->
+      <!-- Salud -->
       <div class="card">
         <div class="card-hdr">
-          <div class="card-title">
-            <div class="card-ico"><i class="fa-solid fa-list-ul"></i></div>
-            Eventos
-            <span class="card-tag" id="log-badge">0</span>
-          </div>
-          <select class="log-sel" id="log-filter" onchange="renderLog()">
-            <option value="">Todos</option>
-            <option value="WEB_APP">Web App</option>
-            <option value="PHYSICAL_BUTTON">Botón</option>
-            <option value="TELEGRAM_BOT">Telegram</option>
-            <option value="VOICE_ASSISTANT">Voz</option>
-            <option value="CRON_SCHEDULE">Programado</option>
-          </select>
+          <div class="card-title"><div class="card-ico"><i class="fa-solid fa-heart-pulse"></i></div> Salud del acuario</div>
+          <span class="card-tag" id="health-score">—/100</span>
         </div>
-        <div class="log-list" id="log-list"><div class="log-empty">Sin eventos aún</div></div>
+        <div style="padding:12px 14px">
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;min-height:24px" id="health-pills"></div>
+          <div style="height:5px;background:var(--card);border-radius:3px;overflow:hidden;margin-bottom:10px">
+            <div id="health-bar" style="height:100%;background:linear-gradient(90deg,var(--teal),var(--green));border-radius:3px;transition:width .6s ease;width:0%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-family:var(--mono);font-size:10px;color:var(--t3)"><i class="fa-solid fa-arrow-up-right-dots"></i> uptime <span id="uptime-val">—</span></span>
+            <button class="bulk-btn" style="padding:5px 10px;font-size:10px;border-radius:6px" onclick="confirmRestart()"><i class="fa-solid fa-arrows-rotate"></i> Reiniciar</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -576,8 +618,30 @@
   </div>
 </div>
 
+<!-- ══ TAB HISTORIAL ══ -->
+<div class="page" id="tab-hist">
+  <div class="card" style="max-width:800px;margin:0 auto">
+    <div class="card-hdr">
+      <div class="card-title">
+        <div class="card-ico"><i class="fa-solid fa-list-ul"></i></div>
+        Historial de eventos
+        <span class="card-tag" id="log-badge">0</span>
+      </div>
+      <select class="log-sel" id="log-filter" onchange="renderLog()">
+        <option value="">Todos</option>
+        <option value="WEB_APP">Web App</option>
+        <option value="PHYSICAL_BUTTON">Botón</option>
+        <option value="TELEGRAM_BOT">Telegram</option>
+        <option value="VOICE_ASSISTANT">Voz</option>
+        <option value="CRON_SCHEDULE">Programado</option>
+      </select>
+    </div>
+    <div class="log-list" id="log-list" style="height:calc(100vh - 210px)"><div class="log-empty">Sin eventos aún</div></div>
+  </div>
+</div>
+
 <footer>
-  <span><i class="fa-solid fa-fish"></i> AquaPi — FastAPI + SQLite WAL + WebSockets</span>
+  <span><i class="fa-solid fa-fish"></i> Oscario — FastAPI + SQLite WAL + WebSockets</span>
   <span><a href="/docs" target="_blank">/docs</a> · <a href="/health" target="_blank">/health</a></span>
 </footer>
 
@@ -641,6 +705,80 @@ function faFor(name){
   return 'fa-plug';
 }
 
+/* ── SCENES ── */
+const SCENES=[
+  {id:'day',   name:'Día',          desc:'Luz blanca, filtro y oxígeno',    icon:'fa-sun',      color:'var(--amber)',
+   on:['luz blanca','blanca','filtro','filter','oxigen'], off:['luz azul','azul','calent','comede','motor']},
+  {id:'night', name:'Noche',        desc:'Luz azul tenue, corriente suave', icon:'fa-moon',     color:'var(--blue)',
+   on:['luz azul','azul','motor'],   off:['luz blanca','blanca','oxigen','filtro','filter','comede']},
+  {id:'feed',  name:'Alimentación', desc:'Comedero activo, filtro en pausa',icon:'fa-utensils', color:'var(--teal)',
+   on:['comede','aliment','feeder'], off:['filtro','filter']},
+  {id:'maint', name:'Mantenimiento',desc:'Todo apagado salvo la luz',       icon:'fa-wrench',   color:'var(--purple)',
+   on:['luz blanca','blanca'],       off:['bomba','filtro','oxigen','motor','calent','comede','azul']},
+];
+let activeScene=null;
+
+function buildScenes(){
+  const el=document.getElementById('scenes-grid'); if(!el) return;
+  el.innerHTML=SCENES.map(s=>`
+    <div class="scene-card ${activeScene===s.id?'s-active':''}" style="--sc:${s.color}" onclick="applyScene('${s.id}')">
+      <div class="scene-ico"><i class="fa-solid ${s.icon}"></i></div>
+      <div class="scene-name">${s.name}</div>
+      <div class="scene-desc">${s.desc}</div>
+    </div>`).join('');
+}
+
+async function applyScene(id){
+  const s=SCENES.find(x=>x.id===id); if(!s) return;
+  activeScene=id; buildScenes();
+  const ctrl=Object.values(pins).filter(p=>CTRL.has(p.pin_type));
+  const toChange=[];
+  for(const p of ctrl){
+    const n=p.name.toLowerCase();
+    if(s.on.some(k=>n.includes(k))  && parseInt(p.current_state)!==1) toChange.push({pin:p.pin_number,state:1});
+    if(s.off.some(k=>n.includes(k)) && parseInt(p.current_state)!==0) toChange.push({pin:p.pin_number,state:0});
+  }
+  if(!toChange.length){ toast(`Escena "${s.name}" ya activa`,'ok'); return; }
+  toast(`Activando escena "${s.name}"…`,'ok');
+  for(const {pin,state} of toChange){
+    await fetch(`${API}/gpio/set/${pin}?state=${state}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:'WEB_APP',metadata:{scene:id}})});
+    await new Promise(r=>setTimeout(r,60));
+  }
+}
+
+/* ── UPTIME + HEALTH ── */
+const _appStart=Date.now();
+setInterval(()=>{
+  const s=Math.floor((Date.now()-_appStart)/1000);
+  const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);
+  const el=document.getElementById('uptime-val');
+  if(el) el.textContent=`${h}h ${String(m).padStart(2,'0')}m`;
+},5000);
+
+function updateHealth(){
+  const ctrl=Object.values(pins).filter(p=>CTRL.has(p.pin_type));
+  if(!ctrl.length) return;
+  const onCount=ctrl.filter(p=>parseInt(p.current_state)===1).length;
+  const hasFilter=ctrl.some(p=>p.name.toLowerCase().includes('filtro')&&parseInt(p.current_state)===1);
+  const hasLight =ctrl.some(p=>p.name.toLowerCase().includes('luz')  &&parseInt(p.current_state)===1);
+  const score=Math.min(100, 60+Math.round((onCount/ctrl.length)*40));
+  const scoreEl=document.getElementById('health-score');
+  const barEl  =document.getElementById('health-bar');
+  const pillsEl=document.getElementById('health-pills');
+  if(scoreEl) scoreEl.textContent=`${score}/100`;
+  if(barEl)   barEl.style.width=score+'%';
+  if(pillsEl){
+    const pills=[];
+    if(hasFilter) pills.push({l:'Filtro activo',  c:'var(--green)'});
+    if(hasLight)  pills.push({l:'Luz encendida',  c:'var(--teal)'});
+    pills.push({l:`${onCount}/${ctrl.length} activos`,c:'var(--blue)'});
+    pillsEl.innerHTML=pills.map(p=>
+      `<span class="health-pill" style="color:${p.c};border-color:${p.c}44;background:${p.c}15">
+        <span style="width:5px;height:5px;border-radius:50%;background:${p.c};display:inline-block"></span>${p.l}
+      </span>`).join('');
+  }
+}
+
 let pins={}, logs=[], events=0, ws, wsT, wsA=0;
 
 /* ── CLOCK ── */
@@ -679,8 +817,9 @@ function buildControlPage(){
     const m=PM[p.pin_type]||PM.GROUND;
     const on=parseInt(p.current_state)===1;
     const fa=faFor(p.name);
+    const isComedero=['comede','aliment','feeder'].some(k=>p.name.toLowerCase().includes(k));
     const div=document.createElement('div');
-    div.className=`pin-card ${on?'state-on':''}`;
+    div.className=`pin-card ${on?'state-on':''} ${isComedero?'comedero-pin':''}`;
     div.id=`pc-${p.pin_number}`;
     div.style.setProperty('--pc',m.c);
     div.innerHTML=`
@@ -692,7 +831,8 @@ function buildControlPage(){
       <div class="pc-meta">Pin ${p.pin_number}${p.bcm_number>=0?' · BCM '+p.bcm_number:''}</div>
       <div class="pc-state ${on?'on':'off'}" id="pcst-${p.pin_number}">
         <i class="fa-solid ${on?'fa-circle-dot':'fa-circle'}"></i> ${on?'Encendido':'Apagado'}
-      </div>`;
+      </div>
+      <div class="pc-bar"></div>`;
     div.addEventListener('click',()=>doToggle(p.pin_number));
     cardEl.appendChild(div);
   });
@@ -919,12 +1059,12 @@ let hbI; function hb(){ clearInterval(hbI); hbI=setInterval(()=>{if(ws?.readySta
 function onMsg(m){
   if(m.event==='INITIAL_STATE'){
     m.pins.forEach(p=>pins[p.pin_number]=p);
-    buildControlPage(); buildMatrix(); updateStats();
+    buildControlPage(); buildMatrix(); updateStats(); buildScenes(); updateHealth();
     m.recent_logs.forEach(l=>addLog(l,false));
     document.getElementById('gpio-mode').textContent=m.gpio_available?'GPIO: Hardware':'GPIO: Simulación';
   } else if(m.event==='GPIO_TOGGLE'){
     if(pins[m.pin_number]) pins[m.pin_number].current_state=m.new_state;
-    updateCard(m.pin_number); events++; updateStats();
+    updateCard(m.pin_number); events++; updateStats(); updateHealth();
     addLog({pin_number:m.pin_number,name:m.name,old_state:m.old_state,new_state:m.new_state,source:m.source,metadata:m.metadata,created_at:m.timestamp},true);
     toast(`${m.name}  →  ${m.new_state?'Encendido':'Apagado'}`,m.new_state?'on':'off');
   } else if(m.event==='PIN_RENAMED'){
@@ -1025,7 +1165,7 @@ document.addEventListener('keydown',e=>{if(e.key==='r'&&!e.ctrlKey&&!e.metaKey){
 (async()=>{
   try{
     const[sr,lr]=await Promise.all([fetch(`${API}/gpio/status`),fetch(`${API}/logs?page_size=30`)]);
-    if(sr.ok){const d=await sr.json();d.pins.forEach(p=>pins[p.pin_number]=p);buildControlPage();updateStats();}
+    if(sr.ok){const d=await sr.json();d.pins.forEach(p=>pins[p.pin_number]=p);buildControlPage();updateStats();buildScenes();updateHealth();}
     if(lr.ok){const d=await lr.json();d.logs.forEach(l=>addLog(l,false));}
   }catch{}
   connectWS();
