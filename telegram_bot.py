@@ -40,45 +40,45 @@ _last_alert: dict[str, float] = {}  # cooldown tracking para notificaciones
 # ── Mapas de nombre → pin_number ──────────────────────────────────
 # Acepta tanto el nombre corto como el nombre completo de la DB
 PIN_ALIASES: dict[str, int] = {
-    "filtro":       11,  # BCM17, Pin 11 — Relé 1
-    "calentador":   13,  # BCM27, Pin 13 — Relé 2
-    "calor":        13,
-    "oxigenador":   15,  # BCM22, Pin 15 — Relé 3
-    "oxig":         15,
-    "luz":          16,  # BCM23, Pin 16 — Relé 4
-    "blanca":       16,
-    "luz blanca":   16,
-    "azul":         18,  # BCM24, Pin 18 — Relé 5
-    "luz azul":     18,
-    "comedero":     22,  # BCM25, Pin 22 — Directo GPIO
-    "feeder":       22,
+    "filtro":       15,  # Pin 15 — Filtro
+    "bomba":        16,  # Pin 16 — Bomba Agua
+    "bomba agua":   16,
+    "oxigenador":   18,  # Pin 18 — Oxigenador
+    "oxig":         18,
+    "calentador":   22,  # Pin 22 — Calentador
+    "calor":        22,
+    "luz":          11,  # Pin 11 — Luz Blanca
+    "blanca":       11,
+    "luz blanca":   11,
+    "azul":         13,  # Pin 13 — Luz Azul
+    "luz azul":     13,
 }
 
 # ── Escenas {pin_number: estado_deseado} ──────────────────────────
 SCENES: dict[str, dict[int, int]] = {
     "dia": {
-        16: 1,  # Luz Blanca ON  (Pin 16, BCM23, Relé 4)
-        18: 0,  # Luz Azul OFF   (Pin 18, BCM24, Relé 5)
-        11: 1,  # Filtro ON      (Pin 11, BCM17, Relé 1)
-        15: 1,  # Oxigenador ON  (Pin 15, BCM22, Relé 3)
-        13: 1,  # Calentador ON  (Pin 13, BCM27, Relé 2)
-        22: 0,  # Comedero OFF   (Pin 22, BCM25)
+        11: 1,  # Luz Blanca ON
+        13: 0,  # Luz Azul OFF
+        15: 1,  # Filtro ON
+        16: 1,  # Bomba Agua ON
+        18: 1,  # Oxigenador ON
+        22: 1,  # Calentador ON
     },
     "noche": {
-        16: 0,  # Luz Blanca OFF
-        18: 0,  # Luz Azul OFF
-        11: 1,  # Filtro ON
-        15: 1,  # Oxigenador ON
-        13: 1,  # Calentador ON
-        22: 0,  # Comedero OFF
+        11: 0,  # Luz Blanca OFF
+        13: 0,  # Luz Azul OFF
+        15: 1,  # Filtro ON
+        16: 1,  # Bomba Agua ON
+        18: 1,  # Oxigenador ON
+        22: 1,  # Calentador ON
     },
     "mantenimiento": {
-        16: 1,  # Luz Blanca ON
-        18: 0,  # Luz Azul OFF
-        11: 0,  # Filtro OFF
-        15: 0,  # Oxigenador OFF
-        13: 0,  # Calentador OFF
-        22: 0,  # Comedero OFF
+        11: 1,  # Luz Blanca ON
+        13: 0,  # Luz Azul OFF
+        15: 0,  # Filtro OFF
+        16: 0,  # Bomba Agua OFF
+        18: 0,  # Oxigenador OFF
+        22: 0,  # Calentador OFF
     },
 }
 
@@ -91,12 +91,12 @@ SCENE_LABELS: dict[str, str] = {
 
 # ── Iconos por dispositivo ────────────────────────────────────────
 PIN_ICONS: dict[int, str] = {
-    11: "🌀",  # Filtro
-    13: "🔥",  # Calentador
-    15: "🪷",  # Oxigenador
-    16: "💡",  # Luz Blanca
-    18: "🔵",  # Luz Azul
-    22: "🍽️",  # Comedero
+    11: "💡",  # Luz Blanca
+    13: "🔵",  # Luz Azul
+    15: "🌀",  # Filtro
+    16: "💧",  # Bomba Agua
+    18: "🫧",  # Oxigenador
+    22: "🔥",  # Calentador
 }
 
 # Pines que se muestran en /status (en orden)

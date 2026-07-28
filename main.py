@@ -81,22 +81,22 @@ DEFAULT_PINS: list[tuple] = [
     (4,  -1, "5V Power",          "POWER_5V",    False, 1),
     (5,   3, "GPIO3 (I2C SCL)",   "GPIO_I2C",    False, 0),
     (6,  -1, "Ground",            "GROUND",      False, 0),
-    (7,   4, "Sensor Temperatura", "GPIO_INPUT",  False, 0),
+    (7,   4, "calentador nuevo",  "GPIO_CLOCK",  False, 0),
     (8,  14, "GPIO14 (UART TXD)", "GPIO_UART",   False, 0),
     (9,  -1, "Ground",            "GROUND",      False, 0),
     (10, 15, "GPIO15 (UART RXD)", "GPIO_UART",   False, 0),
-    (11, 17, "Filtro",             "GPIO_OUTPUT", False, 0),
+    (11, 17, "Luz Blanca",        "GPIO_PWM",    False, 0),
     (12, 18, "GPIO18 (PCM CLK)",  "GPIO_PWM",    False, 0),
-    (13, 27, "Calentador",         "GPIO_OUTPUT", False, 0),
+    (13, 27, "Luz Azul",          "GPIO_PWM",    False, 0),
     (14, -1, "Ground",            "GROUND",      False, 0),
-    (15, 22, "Oxigenador",         "GPIO_OUTPUT", False, 0),
-    (16, 23, "Luz Blanca",          "GPIO_OUTPUT", False, 0),
-    (17, -1, "3V3 Power",        "POWER_3V3",   False, 1),
-    (18, 24, "Luz Azul",           "GPIO_OUTPUT", False, 0),
+    (15, 22, "Filtro",            "GPIO_OUTPUT", False, 0),
+    (16, 23, "Bomba Agua",        "GPIO_OUTPUT", False, 0),
+    (17, -1, "3V3 Power",         "POWER_3V3",   False, 1),
+    (18, 24, "Oxigenador",        "GPIO_OUTPUT", False, 0),
     (19, 10, "GPIO10 (SPI MOSI)", "GPIO_SPI",    False, 0),
     (20, -1, "Ground",            "GROUND",      False, 0),
     (21,  9, "GPIO9 (SPI MISO)",  "GPIO_SPI",    False, 0),
-    (22, 25, "Comedero Auto",      "GPIO_OUTPUT", False, 0),
+    (22, 25, "Calentador",        "GPIO_OUTPUT", False, 0),
     (23, 11, "GPIO11 (SPI SCLK)", "GPIO_SPI",    False, 0),
     (24,  8, "GPIO8 (SPI CE0)",   "GPIO_SPI",    False, 0),
     (25, -1, "Ground",            "GROUND",      False, 0),
@@ -119,6 +119,7 @@ DEFAULT_PINS: list[tuple] = [
 
 # Pines GPIO que pueden ser controlables (BCM >= 0 y tipo GPIO_OUTPUT o GPIO_INPUT)
 CONTROLLABLE_TYPES = {"GPIO_OUTPUT", "GPIO_INPUT", "GPIO_PWM", "GPIO_CLOCK"}
+TOGGLEABLE_TYPES   = {"GPIO_OUTPUT", "GPIO_PWM", "GPIO_CLOCK"}   # Pueden recibir GPIO.output()
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -261,9 +262,21 @@ async def init_db() -> None:
                 "UPDATE pin_configurations SET target_pin = ? WHERE pin_number = ? AND target_pin IS NULL",
                 (target, btn_pin),
             )
-        # ── Exclusión mutua: Luz Blanca (16) ↔ Luz Azul (18) ────────────
-        await db.execute("UPDATE pin_configurations SET mutex_pin=18 WHERE pin_number=16 AND mutex_pin IS NULL")
-        await db.execute("UPDATE pin_configurations SET mutex_pin=16 WHERE pin_number=18 AND mutex_pin IS NULL")
+        # ── Exclusión mutua: Luz Blanca ↔ Luz Azul (por nombre) ─────────
+        await db.execute("""
+            UPDATE pin_configurations
+               SET mutex_pin = (SELECT pin_number FROM pin_configurations
+                                 WHERE LOWER(name) LIKE '%azul%' LIMIT 1)
+             WHERE LOWER(name) LIKE '%blanca%'
+               AND mutex_pin IS NULL
+        """)
+        await db.execute("""
+            UPDATE pin_configurations
+               SET mutex_pin = (SELECT pin_number FROM pin_configurations
+                                 WHERE LOWER(name) LIKE '%blanca%' LIMIT 1)
+             WHERE LOWER(name) LIKE '%azul%'
+               AND mutex_pin IS NULL
+        """)
         await db.commit()
 
         # ── Inicializar hardware GPIO ─────────────────────────────
@@ -309,7 +322,7 @@ async def toggle_pin(
         # Convertir a dict mientras la conexión aún está abierta
         pin = dict(row)
 
-        if pin["pin_type"] not in CONTROLLABLE_TYPES:
+        if pin["pin_type"] not in TOGGLEABLE_TYPES:
             raise HTTPException(
                 status_code=400,
                 detail=f"Pin {pin_number} es de tipo '{pin['pin_type']}' y no es controlable",
