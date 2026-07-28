@@ -86,7 +86,9 @@ export function useOscario(): OscarioState {
 
     function connect() {
       if (unmounted) return
-      const url = `ws://${window.location.host}/ws`
+      const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+      const token = localStorage.getItem('oscario-token') ?? ''
+      const url = `${proto}://${window.location.host}/ws?token=${encodeURIComponent(token)}`
       ws = new WebSocket(url)
       setWsStatus('connecting')
 

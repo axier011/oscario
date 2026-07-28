@@ -648,6 +648,36 @@ html[data-theme="light"] .gpio-pin-dot {
 .log-export:disabled { opacity: .4; cursor: default; }
 
 .log-sentinel { height: 40px; display: flex; align-items: center; justify-content: center; }
+
+/* ── Login ───────────────────────────────────────────────────── */
+.login-page {
+  min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+}
+.login-box {
+  width: 100%; max-width: 360px; padding: 2.5rem 2rem;
+  background: var(--card); border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.35);
+  display: flex; flex-direction: column; align-items: center; gap: .6rem;
+}
+.login-logo  { font-size: 3rem; line-height: 1; }
+.login-title { font-size: 1.6rem; font-weight: 800; margin: 0; color: var(--teal); }
+.login-subtitle { font-size: .85rem; color: var(--muted); margin: 0 0 .8rem; }
+.login-form  { width: 100%; display: flex; flex-direction: column; gap: .75rem; }
+.login-input {
+  width: 100%; padding: .65rem 1rem; border-radius: var(--rs);
+  background: var(--bg); border: 1.5px solid var(--border);
+  color: var(--fg); font-size: .95rem; outline: none; box-sizing: border-box;
+}
+.login-input:focus { border-color: var(--teal); }
+.login-error { color: #f87171; font-size: .82rem; text-align: center; margin: 0; }
+.login-btn {
+  width: 100%; padding: .7rem; border-radius: var(--rs); border: none;
+  background: var(--teal); color: #fff; font-size: 1rem; font-weight: 700;
+  cursor: pointer; transition: opacity .15s;
+}
+.login-btn:hover:not(:disabled) { opacity: .85; }
+.login-btn:disabled { opacity: .5; cursor: default; }
 .log-loading  { color: var(--t2); font-size: .78rem; }
 .log-empty    { text-align: center; padding: 32px 0; color: var(--t2); font-size: .85rem; }
 

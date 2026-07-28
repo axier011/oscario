@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { OscarioCtx, useOscario } from './hooks/useOscario'
+import LoginPage  from './components/LoginPage'
 import TopBar      from './components/TopBar'
 import ControlTab  from './components/ControlTab'
 import GpioMap     from './components/GpioMap'
@@ -9,6 +10,10 @@ import Toast       from './components/Toast'
 import type { TabId } from './types'
 
 export default function App() {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('oscario-token'))
+
+  if (!token) return <LoginPage onLogin={setToken} />
+
   const oscario = useOscario()
 
   const [activeTab, setActiveTab] = useState<TabId>(() => {

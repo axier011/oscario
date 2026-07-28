@@ -16,10 +16,15 @@ from datetime import datetime
 from typing import Any, Optional
 
 import aiosqlite
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+import configparser
+import hashlib
+import hmac
+import secrets
+from fastapi import FastAPI, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 
 # ─────────────────────────────────────────────────────────────────
@@ -578,6 +583,43 @@ async def lifespan(app: FastAPI):
 
 
 # ─────────────────────────────────────────────────────────────────
+# AUTENTICACIÓN  (HMAC-SHA256, sin dependencias extra)
+# ─────────────────────────────────────────────────────────────────
+_CFG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "telegram.cfg")
+
+def _auth_cfg() -> dict:
+    cfg = configparser.ConfigParser()
+    cfg.read(_CFG_PATH, encoding="utf-8")
+    return {
+        "username":     cfg.get("auth", "username",           fallback="admin"),
+        "password":     cfg.get("auth", "password",           fallback="changeme"),
+        "secret_key":   cfg.get("auth", "secret_key",         fallback="changeme_secret_please_edit"),
+        "expire_hours": cfg.getint("auth", "token_expire_hours", fallback=168),
+    }
+
+def _make_token(username: str) -> str:
+    ac = _auth_cfg()
+    expires = int(time.time()) + ac["expire_hours"] * 3600
+    payload = f"{username}:{expires}"
+    sig = hmac.new(ac["secret_key"].encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}:{sig}"
+
+def _verify_token(token: str) -> bool:
+    try:
+        parts = token.split(":")
+        if len(parts) != 3:
+            return False
+        username, expires_str, sig = parts
+        if int(expires_str) < int(time.time()):
+            return False
+        ac = _auth_cfg()
+        payload = f"{username}:{expires_str}"
+        expected = hmac.new(ac["secret_key"].encode(), payload.encode(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, expected)
+    except Exception:
+        return False
+
+# ─────────────────────────────────────────────────────────────────
 # APLICACIÓN FASTAPI
 # ─────────────────────────────────────────────────────────────────
 app = FastAPI(
@@ -594,6 +636,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Middleware de autenticación ───────────────────────────────────
+_AUTH_EXEMPT = {"/api/v1/auth/login"}
+
+class _AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        # Rutas públicas: login, archivos estáticos, WebSocket
+        if (path in _AUTH_EXEMPT
+                or not path.startswith("/api/")
+                or path == "/ws"):
+            return await call_next(request)
+        # Extraer token de header o query param
+        token: str | None = None
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+        if not token:
+            token = request.query_params.get("token")
+        if not token or not _verify_token(token):
+            return JSONResponse({"detail": "No autenticado"}, status_code=401)
+        return await call_next(request)
+
+app.add_middleware(_AuthMiddleware)
+
 
 # ─────────────────────────────────────────────────────────────────
 # MODELOS PYDANTIC
@@ -601,6 +667,30 @@ app.add_middleware(
 class ToggleRequest(BaseModel):
     source: str = "WEB_APP"
     metadata: Optional[dict[str, Any]] = None
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+# ─────────────────────────────────────────────────────────────────
+# ENDPOINTS — AUTH
+# ─────────────────────────────────────────────────────────────────
+@app.post("/api/v1/auth/login")
+async def login(body: LoginRequest):
+    ac = _auth_cfg()
+    if body.username != ac["username"] or body.password != ac["password"]:
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+    return {"token": _make_token(body.username)}
+
+
+@app.get("/api/v1/auth/verify")
+async def verify_token_endpoint(request: Request):
+    token = request.headers.get("Authorization", "")[7:]
+    if not token or not _verify_token(token):
+        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+    return {"valid": True}
 
 
 class VoiceLogRequest(BaseModel):
@@ -873,7 +963,10 @@ async def post_sensor_data(body: SensorDataRequest):
 # WEBSOCKET ENDPOINT
 # ─────────────────────────────────────────────────────────────────
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, token: str = Query(default="")):
+    if not _verify_token(token):
+        await websocket.close(code=4401)
+        return
     await manager.connect(websocket)
     try:
         # Enviar estado inicial al cliente recién conectado
