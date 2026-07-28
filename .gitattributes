@@ -1,0 +1,9 @@
+# Fuerza LF en todos los ficheros de texto (arregla CRLF Windows/Linux)
+* text=auto eol=lf
+
+# Binarios — sin conversión
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
+*.db binary
