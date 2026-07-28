@@ -11,14 +11,54 @@ desde un navegador web en tiempo real, con historial de eventos y lectura de sen
 - **Hardware:** Raspberry Pi 4B — 40 pines GPIO (RPi.GPIO)
 - **Proxy:** nginx como reverse proxy → FastAPI en puerto 8000
 
-## Estructura
+## Estructura y dónde está cada cosa
+
 ```
 /
 ├── main.py           # Backend: API REST + WebSocket + lógica GPIO
 ├── index.html        # Frontend: panel de control, mapa de pines, sensores, logs
 ├── requirements.txt  # Dependencias Python
+├── database.db       # SQLite (se crea automáticamente al arrancar)
 └── data/             # Reservado para datos externos
 ```
+
+### main.py — secciones por orden
+| Líneas (aprox.) | Contenido |
+|-----------------|-----------|
+| 1–55            | Imports + abstracción GPIO (RPi.GPIO real o `_MockGPIO` si no hay hardware) |
+| 56–80           | Constantes: `DB_PATH`, `LOG_LEVEL`, logging |
+| 81–130          | `DEFAULT_PINS` — lista de los 40 pines del header J8 de Raspberry Pi 4B |
+| 131–160         | `ConnectionManager` — gestión de clientes WebSocket conectados |
+| 161–210         | Capa de BBDD: `get_db()` (context manager aiosqlite) + `init_db()` |
+| 211–270         | `toggle_pin()` — lógica principal: cambia estado en hardware + BBDD + broadcast WS |
+| 271–300         | `poll_physical_buttons()` — tarea background que lee GPIO_INPUT cada 50ms |
+| 301–320         | `lifespan()` — startup/shutdown de FastAPI (init BBDD, lanza polling, cleanup GPIO) |
+| 321–340         | Instancia FastAPI + middleware CORS |
+| 341–360         | Modelos Pydantic: `ToggleRequest`, `VoiceLogRequest`, `SensorDataRequest` |
+| 361–500         | Endpoints GPIO: `/status`, `/toggle`, `/set`, `/pin` (PATCH rename) |
+| 501–600         | Endpoints logs: `/logs`, `/logs/voice` (GET + POST) |
+| 601–650         | Endpoints sensores: `/sensors` (GET + POST) |
+| 651–720         | WebSocket `/ws`: envía estado inicial + escucha PING/TOGGLE |
+| 721–760         | Servir frontend: `GET /` → `index.html`, `GET /health` |
+| 761–790         | `POST /api/v1/system/restart` — llama a `systemctl restart acuario-api` |
+| 791–fin         | Punto de entrada `uvicorn.run()` |
+
+### index.html — secciones
+| Zona | Contenido |
+|------|-----------|
+| `<style>` | Todo el CSS: variables CSS, topbar, tabs, tarjetas de pines, mapa GPIO, logs, modales, responsive, modo claro |
+| `<body>` hasta `<script>` | HTML: topbar, tabs, página Control GPIO, página Mapa de Pines, footer, modales, toast stack |
+| `<script>` — constantes | `API`, `WS`, `PM` (metadatos por tipo de pin), `NAME_ICONS` (iconos por nombre de dispositivo) |
+| `<script>` — estado | Variables globales: `pins`, `logs`, `events`, `ws` |
+| `<script>` — UI | `buildControlPage()`, `updateCard()`, `updateStats()` |
+| `<script>` — mapa GPIO | `buildMatrix()`, `makeLabel()`, `makeCpin()`, `updateCpin()` |
+| `<script>` — menú contextual | `showCtxMenu()`, `ctxToggle()` |
+| `<script>` — modal renombrar | `openRenameModal()`, `saveRename()` |
+| `<script>` — acciones | `doToggle()`, `allPins()` |
+| `<script>` — WebSocket | `connectWS()`, handlers de eventos (`GPIO_TOGGLE`, `INITIAL_STATE`, `SENSOR_DATA`, `PIN_RENAMED`) |
+| `<script>` — sensores | `updateSensors()` |
+| `<script>` — tema | `toggleTheme()`, persistencia en `localStorage` |
+| `<script>` — toasts | `toast()` |
 
 ## Base de datos (SQLite — database.db)
 | Tabla               | Contenido                                      |
