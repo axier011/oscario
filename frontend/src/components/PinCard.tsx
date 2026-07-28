@@ -21,8 +21,11 @@ export default function PinCard({ pinNumber }: Props) {
     e.stopPropagation()
     if (!pin) return
     if (isFeed) {
-      try { await apiSetPin(11, 1) } catch { /* ignore */ }
-      addToast('on', 'Luz Blanca encendida')
+      const luzBlanca = Object.values(pins).find(p => p.name.toLowerCase().includes('blanca'))
+      if (luzBlanca) {
+        try { await apiSetPin(luzBlanca.pin_number, 1) } catch { /* ignore */ }
+        addToast('on', 'Luz Blanca encendida')
+      }
       await new Promise<void>(r => setTimeout(r, 400))
       try {
         await apiSetPin(pinNumber, 1)

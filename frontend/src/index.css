@@ -630,9 +630,22 @@ html[data-theme="light"] .gpio-pin-dot {
 .log-badge.off { background: rgba(192,68,74,.2);  color: var(--red);   }
 
 .log-source { font-size: .64rem; font-weight: 700; padding: 1px 5px; border-radius: 100px; }
-.log-source.web_app          { background: rgba(74,144,217,.2); color: var(--blue);   }
-.log-source.physical_button  { background: rgba(67,168,104,.2); color: var(--green);  }
+.log-source.web_app          { background: rgba(74,144,217,.2);  color: var(--blue);   }
+.log-source.physical_button  { background: rgba(67,168,104,.2);  color: var(--green);  }
+.log-source.telegram         { background: rgba(41,182,246,.2);  color: #29b6f6;       }
 .log-source.other            { background: rgba(255,255,255,.07); color: var(--t2);   }
+
+.log-controls {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.log-date { width: 130px; }
+.log-export {
+  padding: 5px 12px; border-radius: var(--rs); font-size: .78rem; font-weight: 700;
+  background: var(--teal); color: #fff; border: none; cursor: pointer;
+  display: flex; align-items: center; gap: 5px;
+}
+.log-export:hover { opacity: .85; }
+.log-export:disabled { opacity: .4; cursor: default; }
 
 .log-sentinel { height: 40px; display: flex; align-items: center; justify-content: center; }
 .log-loading  { color: var(--t2); font-size: .78rem; }

@@ -80,40 +80,40 @@ DEFAULT_PINS: list[tuple] = [
     (4,  -1, "5V Power",          "POWER_5V",    False, 1),
     (5,   3, "GPIO3 (I2C SCL)",   "GPIO_I2C",    False, 0),
     (6,  -1, "Ground",            "GROUND",      False, 0),
-    (7,   4, "GPIO4 (GPCLK0)",    "GPIO_CLOCK",  False, 0),
+    (7,   4, "Sensor Temperatura", "GPIO_INPUT",  False, 0),
     (8,  14, "GPIO14 (UART TXD)", "GPIO_UART",   False, 0),
     (9,  -1, "Ground",            "GROUND",      False, 0),
     (10, 15, "GPIO15 (UART RXD)", "GPIO_UART",   False, 0),
-    (11, 17, "Luz Blanca",        "GPIO_PWM",    False, 0),
+    (11, 17, "Filtro",             "GPIO_OUTPUT", False, 0),
     (12, 18, "GPIO18 (PCM CLK)",  "GPIO_PWM",    False, 0),
-    (13, 27, "Luz Azul",          "GPIO_PWM",    False, 0),
+    (13, 27, "Calentador",         "GPIO_OUTPUT", False, 0),
     (14, -1, "Ground",            "GROUND",      False, 0),
-    (15, 22, "Filtro",            "GPIO_OUTPUT", False, 0),
-    (16, 23, "Bomba Agua",        "GPIO_OUTPUT", False, 0),
+    (15, 22, "Oxigenador",         "GPIO_OUTPUT", False, 0),
+    (16, 23, "Luz Blanca",          "GPIO_OUTPUT", False, 0),
     (17, -1, "3V3 Power",        "POWER_3V3",   False, 1),
-    (18, 24, "Oxigenador",        "GPIO_OUTPUT", False, 0),
+    (18, 24, "Luz Azul",           "GPIO_OUTPUT", False, 0),
     (19, 10, "GPIO10 (SPI MOSI)", "GPIO_SPI",    False, 0),
     (20, -1, "Ground",            "GROUND",      False, 0),
     (21,  9, "GPIO9 (SPI MISO)",  "GPIO_SPI",    False, 0),
-    (22, 25, "Calentador",        "GPIO_OUTPUT", False, 0),
+    (22, 25, "Comedero Auto",      "GPIO_OUTPUT", False, 0),
     (23, 11, "GPIO11 (SPI SCLK)", "GPIO_SPI",    False, 0),
     (24,  8, "GPIO8 (SPI CE0)",   "GPIO_SPI",    False, 0),
     (25, -1, "Ground",            "GROUND",      False, 0),
     (26,  7, "GPIO7 (SPI CE1)",   "GPIO_SPI",    False, 0),
     (27,  0, "GPIO0 (ID SD)",     "ID_EEPROM",   False, 0),
     (28,  1, "GPIO1 (ID SC)",     "ID_EEPROM",   False, 0),
-    (29,  5, "Comedero Auto",     "GPIO_OUTPUT", False, 0),
+    (29,  5, "Botón Filtro",      "GPIO_INPUT",  False, 0),
     (30, -1, "Ground",            "GROUND",      False, 0),
-    (31,  6, "Motor Corriente",   "GPIO_PWM",    False, 0),
+    (31,  6, "Botón Calentador",  "GPIO_INPUT",  False, 0),
     (32, 12, "GPIO12 (PWM0)",     "GPIO_PWM",    False, 0),
     (33, 13, "GPIO13 (PWM1)",     "GPIO_PWM",    False, 0),
     (34, -1, "Ground",            "GROUND",      False, 0),
     (35, 19, "GPIO19 (PCM FS)",   "GPIO_PWM",    False, 0),
-    (36, 16, "GPIO16",            "GPIO_OUTPUT", False, 0),
-    (37, 26, "GPIO26",            "GPIO_OUTPUT", False, 0),
-    (38, 20, "GPIO20 (PCM DIN)",  "GPIO_OUTPUT", False, 0),
+    (36, 16, "Botón Oxigenador",  "GPIO_INPUT",  False, 0),
+    (37, 26, "Botón Luz Blanca",  "GPIO_INPUT",  False, 0),
+    (38, 20, "Botón Luz Azul",    "GPIO_INPUT",  False, 0),
     (39, -1, "Ground",            "GROUND",      False, 0),
-    (40, 21, "GPIO21 (PCM DOUT)", "GPIO_OUTPUT", False, 0),
+    (40, 21, "Botón Comedero",    "GPIO_INPUT",  False, 0),
 ]
 
 # Pines GPIO que pueden ser controlables (BCM >= 0 y tipo GPIO_OUTPUT o GPIO_INPUT)
@@ -240,6 +240,15 @@ async def init_db() -> None:
             await db.commit()
             logger.info(f"✅ {len(DEFAULT_PINS)} pines GPIO insertados en pin_configurations")
 
+        # ── Asignar target_pin a botones físicos (si no están asignados) ─
+        _BUTTON_TARGETS = {29: 11, 31: 13, 36: 15, 37: 16, 38: 18, 40: 22}
+        for btn_pin, target in _BUTTON_TARGETS.items():
+            await db.execute(
+                "UPDATE pin_configurations SET target_pin = ? WHERE pin_number = ? AND target_pin IS NULL",
+                (target, btn_pin),
+            )
+        await db.commit()
+
         # ── Inicializar hardware GPIO ─────────────────────────────
         async with db.execute(
             "SELECT bcm_number, pin_type, current_state FROM pin_configurations"
@@ -249,8 +258,11 @@ async def init_db() -> None:
         for row in gpio_init_rows:
             bcm, ptype, state = row["bcm_number"], row["pin_type"], row["current_state"]
             if bcm >= 0 and ptype in CONTROLLABLE_TYPES:
-                GPIO.setup(bcm, GPIO.OUT)
-                GPIO.output(bcm, GPIO.HIGH if state else GPIO.LOW)
+                if ptype == "GPIO_INPUT":
+                    GPIO.setup(bcm, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+                else:
+                    GPIO.setup(bcm, GPIO.OUT)
+                    GPIO.output(bcm, GPIO.HIGH if state else GPIO.LOW)
 
         logger.info("✅ GPIO inicializado desde base de datos")
 
@@ -427,32 +439,55 @@ async def monitor_alerts() -> None:
         await asyncio.sleep(300)  # Revisar cada 5 minutos
 
 
+async def schedule_daily_report() -> None:
+    """
+    Envía el informe de actividad diario a la hora configurada (report_hour en telegram.cfg).
+    """
+    last_sent_date = None
+    while True:
+        await asyncio.sleep(60)
+        try:
+            from telegram_bot import notify_all, build_daily_report, get_alert_config
+            cfg = get_alert_config()
+            now = datetime.now()
+            if now.hour == cfg["report_hour"] and now.date() != last_sent_date:
+                last_sent_date = now.date()
+                report = await build_daily_report()
+                await notify_all(f"📅 *Informe diario automático*\n\n{report}")
+        except ImportError:
+            pass
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.error(f"Error en schedule_daily_report: {exc}")
+
+
 async def poll_physical_buttons() -> None:
     """
-    Monitoriza en background los pines configurados como GPIO_INPUT.
-    Detecta flancos descendentes (botón presionado) y hace toggle en la BBDD.
+    Monitoriza botones físicos (GPIO_INPUT con target_pin asignado).
+    Detecta flancos descendentes y hace toggle del dispositivo objetivo.
     """
     logger.info("🔁 Tarea de polling de botones físicos iniciada")
     while True:
         try:
             async with get_db() as db:
                 async with db.execute(
-                    "SELECT pin_number, bcm_number, current_state FROM pin_configurations "
-                    "WHERE pin_type = 'GPIO_INPUT' AND bcm_number >= 0"
+                    "SELECT pin_number, bcm_number, target_pin FROM pin_configurations "
+                    "WHERE pin_type = 'GPIO_INPUT' AND bcm_number >= 0 AND target_pin IS NOT NULL"
                 ) as cur:
                     buttons = [dict(r) for r in await cur.fetchall()]
 
             for btn in buttons:
-                pin, bcm = btn["pin_number"], btn["bcm_number"]
+                pin, bcm, target = btn["pin_number"], btn["bcm_number"], btn["target_pin"]
                 current_hw = GPIO.input(bcm)
                 prev = _prev_button_states.get(pin, 1)
 
                 # Flanco descendente = botón presionado (pull-up interno)
                 if prev == 1 and current_hw == 0:
                     await toggle_pin(
-                        pin_number=pin,
+                        pin_number=target,
                         source="PHYSICAL_BUTTON",
-                        metadata={"bcm": bcm},
+                        metadata={"button_pin": pin, "bcm": bcm},
                     )
 
                 _prev_button_states[pin] = current_hw
@@ -474,6 +509,7 @@ async def lifespan(app: FastAPI):
     await init_db()
     task = asyncio.create_task(poll_physical_buttons())
     alert_task = asyncio.create_task(monitor_alerts())
+    report_task = asyncio.create_task(schedule_daily_report())
     # ── Telegram bot (opcional — requiere telegram.cfg con token) ──
     try:
         from telegram_bot import start_telegram_bot
@@ -486,6 +522,7 @@ async def lifespan(app: FastAPI):
     yield
     task.cancel()
     alert_task.cancel()
+    report_task.cancel()
     try:
         from telegram_bot import stop_telegram_bot
         await stop_telegram_bot()
@@ -647,6 +684,8 @@ async def get_logs(
     page_size: int = Query(50, ge=1, le=500),
     pin_number: Optional[int] = Query(None),
     source: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    date_to: Optional[str] = Query(None, description="YYYY-MM-DD"),
 ):
     offset = (page - 1) * page_size
     conditions: list[str] = []
@@ -658,6 +697,12 @@ async def get_logs(
     if source:
         conditions.append("g.source = ?")
         params.append(source.upper())
+    if date_from:
+        conditions.append("g.created_at >= ?")
+        params.append(date_from)
+    if date_to:
+        conditions.append("g.created_at <= ?")
+        params.append(date_to + "T23:59:59.999")
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 

@@ -47,7 +47,7 @@ export function useOscario(): OscarioState {
     try {
       const ver    = localStorage.getItem('osc-visible-v')
       const stored = localStorage.getItem('osc-visible')
-      if (ver === '2' && stored) return JSON.parse(stored) as number[]
+      if (ver === '3' && stored) return JSON.parse(stored) as number[]
     } catch { /* ignore */ }
     return DEFAULT_VISIBLE
   })
@@ -55,7 +55,7 @@ export function useOscario(): OscarioState {
   // Persist visiblePins to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('osc-visible',   JSON.stringify(visiblePins))
-    localStorage.setItem('osc-visible-v', '2')
+    localStorage.setItem('osc-visible-v', '3')
   }, [visiblePins])
 
   // ── Toast helpers ────────────────────────────────────────────────────────────

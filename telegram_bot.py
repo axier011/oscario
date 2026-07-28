@@ -11,6 +11,7 @@ Comandos:
   /noche          Activar escena Noche
   /alimentar      Pulso del comedero (2 segundos)
   /mantenimiento  Activar escena Mantenimiento
+  /reporte        Informe de actividad del día
   /ayuda          Lista de comandos
 
 Seguridad: sólo los chat_ids listados en telegram.cfg pueden enviar órdenes.
@@ -21,6 +22,7 @@ import asyncio
 import configparser
 import logging
 import os
+from datetime import date, datetime
 from typing import Any, Callable, Awaitable
 
 from telegram import Update
@@ -38,51 +40,45 @@ _last_alert: dict[str, float] = {}  # cooldown tracking para notificaciones
 # ── Mapas de nombre → pin_number ──────────────────────────────────
 # Acepta tanto el nombre corto como el nombre completo de la DB
 PIN_ALIASES: dict[str, int] = {
-    "luz":          11,
-    "blanca":       11,
-    "luz blanca":   11,
-    "azul":         13,
-    "luz azul":     13,
-    "filtro":       15,
-    "bomba":        16,
-    "bomba agua":   16,
-    "oxigenador":   18,
-    "oxig":         18,
-    "calentador":   22,
-    "calor":        22,
-    "comedero":     29,
-    "feeder":       29,
-    "motor":        31,
-    "motor corriente": 31,
+    "filtro":       11,  # BCM17, Pin 11 — Relé 1
+    "calentador":   13,  # BCM27, Pin 13 — Relé 2
+    "calor":        13,
+    "oxigenador":   15,  # BCM22, Pin 15 — Relé 3
+    "oxig":         15,
+    "luz":          16,  # BCM23, Pin 16 — Relé 4
+    "blanca":       16,
+    "luz blanca":   16,
+    "azul":         18,  # BCM24, Pin 18 — Relé 5
+    "luz azul":     18,
+    "comedero":     22,  # BCM25, Pin 22 — Directo GPIO
+    "feeder":       22,
 }
 
 # ── Escenas {pin_number: estado_deseado} ──────────────────────────
 SCENES: dict[str, dict[int, int]] = {
     "dia": {
-        11: 1,  # Luz Blanca ON
-        13: 0,  # Luz Azul OFF
-        15: 1,  # Filtro ON
-        18: 1,  # Oxigenador ON
-        22: 1,  # Calentador ON
-        29: 0,  # Comedero OFF
+        16: 1,  # Luz Blanca ON  (Pin 16, BCM23, Relé 4)
+        18: 0,  # Luz Azul OFF   (Pin 18, BCM24, Relé 5)
+        11: 1,  # Filtro ON      (Pin 11, BCM17, Relé 1)
+        15: 1,  # Oxigenador ON  (Pin 15, BCM22, Relé 3)
+        13: 1,  # Calentador ON  (Pin 13, BCM27, Relé 2)
+        22: 0,  # Comedero OFF   (Pin 22, BCM25)
     },
     "noche": {
-        11: 0,  # Luz Blanca OFF
-        13: 0,  # Luz Azul OFF
-        15: 1,  # Filtro ON
-        18: 1,  # Oxigenador ON
-        22: 1,  # Calentador ON
-        29: 0,  # Comedero OFF
+        16: 0,  # Luz Blanca OFF
+        18: 0,  # Luz Azul OFF
+        11: 1,  # Filtro ON
+        15: 1,  # Oxigenador ON
+        13: 1,  # Calentador ON
+        22: 0,  # Comedero OFF
     },
     "mantenimiento": {
-        11: 1,  # Luz Blanca ON
-        13: 0,  # Luz Azul OFF
-        15: 0,  # Filtro OFF
-        16: 0,  # Bomba OFF
-        18: 0,  # Oxigenador OFF
-        22: 0,  # Calentador OFF
-        29: 0,  # Comedero OFF
-        31: 0,  # Motor OFF
+        16: 1,  # Luz Blanca ON
+        18: 0,  # Luz Azul OFF
+        11: 0,  # Filtro OFF
+        15: 0,  # Oxigenador OFF
+        13: 0,  # Calentador OFF
+        22: 0,  # Comedero OFF
     },
 }
 
@@ -95,18 +91,16 @@ SCENE_LABELS: dict[str, str] = {
 
 # ── Iconos por dispositivo ────────────────────────────────────────
 PIN_ICONS: dict[int, str] = {
-    11: "💡",  # Luz Blanca
-    13: "🔵",  # Luz Azul
-    15: "🌀",  # Filtro
-    16: "💧",  # Bomba
-    18: "🫧",  # Oxigenador
-    22: "🔥",  # Calentador
-    29: "🍽️",  # Comedero
-    31: "⚙️",  # Motor
+    11: "🌀",  # Filtro
+    13: "🔥",  # Calentador
+    15: "🪷",  # Oxigenador
+    16: "💡",  # Luz Blanca
+    18: "🔵",  # Luz Azul
+    22: "🍽️",  # Comedero
 }
 
 # Pines que se muestran en /status (en orden)
-VISIBLE_PINS = [11, 13, 15, 16, 18, 22, 29, 31]
+VISIBLE_PINS = [11, 13, 15, 16, 18, 22]
 
 
 # ── Utilidades ────────────────────────────────────────────────────
@@ -140,6 +134,7 @@ def get_alert_config() -> dict:
         "critical_pins":       critical_pins,
         "alert_if_off_minutes":_int("alert_if_off_minutes", 60),
         "cooldown_minutes":    _int("cooldown_minutes", 30),
+        "report_hour":         _int("report_hour", 21),
     }
 
 
@@ -167,6 +162,68 @@ async def notify_all(message: str) -> None:
             await _app.bot.send_message(chat_id=chat_id, text=message, parse_mode="Markdown")
         except Exception as exc:
             logger.error(f"Error enviando notificación a {chat_id}: {exc}")
+
+
+async def build_daily_report() -> str:
+    """Genera el informe de actividad del día actual."""
+    today = date.today().isoformat()
+
+    async with _get_db_ctx() as db:  # type: ignore[misc]
+        async with db.execute(
+            """SELECT g.pin_number, p.name,
+                      COUNT(*) as total,
+                      SUM(CASE WHEN g.new_state=1 THEN 1 ELSE 0 END) as on_count
+               FROM gpio_logs g
+               JOIN pin_configurations p ON g.pin_number = p.pin_number
+               WHERE date(g.created_at) = ?
+               GROUP BY g.pin_number
+               ORDER BY total DESC""",
+            (today,),
+        ) as cur:
+            activity = [dict(r) for r in await cur.fetchall()]
+
+        async with db.execute(
+            "SELECT pin_number, name, current_state FROM pin_configurations "
+            "WHERE pin_number IN ({})".format(",".join("?" * len(VISIBLE_PINS))),
+            VISIBLE_PINS,
+        ) as cur:
+            states = {r["pin_number"]: dict(r) for r in await cur.fetchall()}
+
+    now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+    lines = [f"📊 *Informe diario — {today}*\n"]
+
+    lines.append("*Estado actual:*")
+    for pnum in VISIBLE_PINS:
+        if pnum in states:
+            p = states[pnum]
+            icon = PIN_ICONS.get(pnum, "•")
+            lines.append(f"{icon} {p['name']} — {'🟢 ON' if p['current_state'] else '⚫ OFF'}")
+
+    if activity:
+        lines.append(f"\n*Actividad hoy ({len(activity)} dispositivos activos):*")
+        for row in activity:
+            icon = PIN_ICONS.get(row["pin_number"], "•")
+            lines.append(f"{icon} {row['name']}: {row['total']} eventos ({row['on_count']}× ON)")
+    else:
+        lines.append("\n_Sin actividad registrada hoy._")
+
+    lines.append(f"\n_Generado: {now_str}_")
+    return "\n".join(lines)
+
+
+async def _send_startup_message() -> None:
+    """Envía notificación de inicio + primer informe de prueba."""
+    await asyncio.sleep(4)
+    try:
+        hour = get_alert_config().get("report_hour", 21)
+        report = await build_daily_report()
+        await notify_all(
+            f"🐠 *Oscario en línea*\n"
+            f"Informe diario programado a las {hour:02d}:00 · /reporte para ver ahora\n\n"
+            + report
+        )
+    except Exception as exc:
+        logger.error(f"Error en startup notification: {exc}")
 
 
 def _load_config() -> tuple[str, set[int]]:
@@ -344,18 +401,30 @@ async def cmd_alimentar(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("⛔ No tienes acceso.")  # type: ignore[union-attr]
         return
     await update.message.reply_text("🍽️ Activando comedero…")  # type: ignore[union-attr]
-    # Encender Luz Blanca (pin 11)
-    await _set_pin_to(11, 1)
+    # Encender Luz Blanca (Pin 16, BCM23, Relé 4)
+    await _set_pin_to(16, 1)
     await asyncio.sleep(0.5)
-    # Encender comedero (pin 29)
-    await _set_pin_to(29, 1)
+    # Encender comedero (Pin 22, BCM25)
+    await _set_pin_to(22, 1)
     await asyncio.sleep(2.0)
     # Apagar comedero
-    await _set_pin_to(29, 0)
+    await _set_pin_to(22, 0)
     await update.message.reply_text("✅ Comedero activado y apagado.", parse_mode="Markdown")  # type: ignore[union-attr]
 
 
-# ── Lifecycle ─────────────────────────────────────────────────────
+async def cmd_reporte(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_allowed(update):
+        await update.message.reply_text("⛔ No tienes acceso.")  # type: ignore[union-attr]
+        return
+    await update.message.reply_text("⏳ Generando informe…")  # type: ignore[union-attr]
+    try:
+        report = await build_daily_report()
+        await update.message.reply_text(report, parse_mode="Markdown")  # type: ignore[union-attr]
+    except Exception as exc:
+        await update.message.reply_text(f"❌ Error: {exc}")  # type: ignore[union-attr]
+
+
+# ── Lifecycle ────────────────────────────────────────────────────────
 
 async def start_telegram_bot(toggle_pin_fn: Callable, get_db_ctx: Callable) -> None:
     """
@@ -389,6 +458,7 @@ async def start_telegram_bot(toggle_pin_fn: Callable, get_db_ctx: Callable) -> N
     _app.add_handler(CommandHandler("alimentar",      cmd_alimentar))
     _app.add_handler(CommandHandler("feed",           cmd_alimentar))
     _app.add_handler(CommandHandler("mantenimiento",  cmd_mantenimiento))
+    _app.add_handler(CommandHandler("reporte",        cmd_reporte))
 
     await _app.initialize()
     await _app.start()
@@ -396,6 +466,7 @@ async def start_telegram_bot(toggle_pin_fn: Callable, get_db_ctx: Callable) -> N
 
     mode = "sin restricción" if not _allowed else f"chats autorizados: {_allowed}"
     logger.info(f"✅ Bot de Telegram iniciado ({mode})")
+    asyncio.create_task(_send_startup_message())
 
 
 async def stop_telegram_bot() -> None:

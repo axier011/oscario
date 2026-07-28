@@ -35,9 +35,16 @@ export async function apiRenamePin(pinNumber: number, name: string): Promise<voi
   })
 }
 
-export async function apiFetchLogs(page = 1, source?: string): Promise<LogsResponse> {
+export async function apiFetchLogs(
+  page = 1,
+  source?: string,
+  dateFrom?: string,
+  dateTo?: string,
+): Promise<LogsResponse> {
   const params = new URLSearchParams({ page: String(page), page_size: '50' })
-  if (source) params.set('source', source)
+  if (source)   params.set('source',    source)
+  if (dateFrom) params.set('date_from', dateFrom)
+  if (dateTo)   params.set('date_to',   dateTo)
   return request(`/logs?${params}`) as Promise<LogsResponse>
 }
 
