@@ -171,6 +171,17 @@ async def get_db() -> aiosqlite.Connection:
 async def init_db() -> None:
     """Crea las tablas si no existen e inserta configuración por defecto."""
     async with get_db() as db:
+        # ── Migraciones de esquema (idempotentes) ──────────────────
+        for _sql in [
+            "ALTER TABLE pin_configurations ADD COLUMN target_pin INTEGER",
+            "ALTER TABLE pin_configurations ADD COLUMN mutex_pin  INTEGER",
+        ]:
+            try:
+                await db.execute(_sql)
+                await db.commit()
+            except Exception:
+                pass  # Columna ya existe
+
         # ── pin_configurations ────────────────────────────────────
         await db.execute("""
             CREATE TABLE IF NOT EXISTS pin_configurations (
@@ -180,6 +191,8 @@ async def init_db() -> None:
                 pin_type     VARCHAR(40)  NOT NULL,
                 is_active_low BOOLEAN NOT NULL DEFAULT 0,
                 current_state BOOLEAN NOT NULL DEFAULT 0,
+                target_pin   INTEGER,
+                mutex_pin    INTEGER,
                 updated_at   TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now'))
             )
         """)
@@ -247,6 +260,9 @@ async def init_db() -> None:
                 "UPDATE pin_configurations SET target_pin = ? WHERE pin_number = ? AND target_pin IS NULL",
                 (target, btn_pin),
             )
+        # ── Exclusión mutua: Luz Blanca (16) ↔ Luz Azul (18) ────────────
+        await db.execute("UPDATE pin_configurations SET mutex_pin=18 WHERE pin_number=16 AND mutex_pin IS NULL")
+        await db.execute("UPDATE pin_configurations SET mutex_pin=16 WHERE pin_number=18 AND mutex_pin IS NULL")
         await db.commit()
 
         # ── Inicializar hardware GPIO ─────────────────────────────
@@ -342,6 +358,21 @@ async def toggle_pin(
     # Broadcast a todos los clientes WebSocket
     await manager.broadcast(result)
     logger.info(f"🔄 Pin {pin_number} ({pin['name']}): {old_state}→{new_state} [{source}]")
+
+    # Exclusión mutua: si se encendió un pin con mutex_pin, apagar el par
+    if new_state == 1 and pin.get("mutex_pin"):
+        async with get_db() as _db:
+            async with _db.execute(
+                "SELECT current_state FROM pin_configurations WHERE pin_number = ?",
+                (pin["mutex_pin"],),
+            ) as _cur:
+                _mx = await _cur.fetchone()
+        if _mx and int(_mx["current_state"]) == 1:
+            try:
+                await toggle_pin(pin["mutex_pin"], source=source, metadata={"mutex_from": pin_number})
+            except Exception as _e:
+                logger.error(f"Error apagando mutex pin {pin['mutex_pin']}: {_e}")
+
     return result
 
 
