@@ -1,0 +1,72 @@
+# AquaPi — Control System
+
+## Qué es
+Panel de control GPIO para acuario automatizado sobre Raspberry Pi 4B.
+Permite encender/apagar dispositivos del acuario (luces, filtro, bomba, calentador…)
+desde un navegador web en tiempo real, con historial de eventos y lectura de sensores.
+
+## Stack técnico
+- **Backend:** FastAPI + uvicorn + aiosqlite (SQLite WAL) + WebSockets
+- **Frontend:** HTML/CSS/JS vanilla — SPA sin frameworks
+- **Hardware:** Raspberry Pi 4B — 40 pines GPIO (RPi.GPIO)
+- **Proxy:** nginx como reverse proxy → FastAPI en puerto 8000
+
+## Estructura
+```
+/
+├── main.py           # Backend: API REST + WebSocket + lógica GPIO
+├── index.html        # Frontend: panel de control, mapa de pines, sensores, logs
+├── requirements.txt  # Dependencias Python
+└── data/             # Reservado para datos externos
+```
+
+## Base de datos (SQLite — database.db)
+| Tabla               | Contenido                                      |
+|---------------------|------------------------------------------------|
+| pin_configurations  | Estado y config de los 40 pines GPIO           |
+| gpio_logs           | Historial de eventos: quién cambió qué y cuándo|
+| sensor_data         | Lecturas de temperatura, pH, nivel de agua…    |
+| voice_chat_logs     | Interacciones con asistente de voz / Telegram  |
+
+## API REST principal
+| Método | Ruta                          | Acción                        |
+|--------|-------------------------------|-------------------------------|
+| GET    | /api/v1/gpio/status           | Estado de los 40 pines        |
+| POST   | /api/v1/gpio/toggle/{pin}     | Toggle ON/OFF de un pin       |
+| POST   | /api/v1/gpio/set/{pin}        | Establecer estado específico  |
+| PATCH  | /api/v1/gpio/pin/{pin}        | Renombrar pin                 |
+| GET    | /api/v1/logs                  | Historial paginado de eventos |
+| GET    | /api/v1/sensors               | Últimas lecturas de sensores  |
+| POST   | /api/v1/sensors               | Insertar lectura de sensor    |
+| POST   | /api/v1/system/restart        | Reiniciar servicio systemd    |
+| WS     | /ws                           | WebSocket tiempo real         |
+| GET    | /docs                         | Swagger UI                    |
+
+## Tipos de pin GPIO
+- `GPIO_OUTPUT` — salida digital (relé, LED…) — controlable
+- `GPIO_INPUT`  — entrada digital (botón físico) — controlable
+- `GPIO_PWM`    — salida PWM (motor, dimmer…) — controlable
+- `GPIO_CLOCK`  — reloj — controlable
+- `POWER_5V`, `POWER_3V3`, `GROUND`, `GPIO_SPI`, `GPIO_I2C`, `GPIO_UART`, `ID_EEPROM` — solo informativo
+
+## Fuentes de eventos (source en gpio_logs)
+- `WEB_APP` — acción desde el panel web
+- `PHYSICAL_BUTTON` — botón físico en GPIO_INPUT
+- `TELEGRAM_BOT` — bot de Telegram (opcional)
+- `VOICE_ASSISTANT` — asistente de voz (opcional)
+- `CRON_SCHEDULE` — tarea programada
+- `AUTOMATION` — automatización interna
+
+## Despliegue en la Pi
+- **Ruta:** `/var/www/html/`
+- **Usuario:** `axier` — hostname: `DAO`
+- **IP local:** `192.168.1.116`
+- **Servicio:** `sudo systemctl [start|stop|restart|status] acuario-api`
+- **Logs:** `journalctl -u acuario-api -f`
+- **Python:** 3.13 — venv en `/var/www/html/venv/`
+- **Nota:** servicio corre como `root` (necesario para acceso a `/dev/mem` con RPi.GPIO)
+
+## Modo simulación
+Si `RPi.GPIO` no está disponible (desarrollo en PC), el backend carga un mock
+`_MockGPIO` que simula el hardware. Los estados se guardan en memoria y BBDD
+pero no activan pines físicos.
