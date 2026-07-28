@@ -97,16 +97,6 @@ export default function ControlTab() {
         />
       </div>
 
-      {/* System pins */}
-      <div className="section-header" style={{ marginBottom: 8 }}>
-        <span className="section-title">Pines de sistema</span>
-      </div>
-      <div className="sys-pins">
-        {sysPins.map(pin => (
-          <SysPin key={pin.pin_number} pin={pin} />
-        ))}
-      </div>
-
       {showAddModal && (
         <AddDeviceModal
           availablePins={availablePins}

@@ -17,7 +17,7 @@ export const PM: Record<string, { c: string; ctrl: boolean; icon: string; label:
 
 export const CTRL_TYPES = new Set(['GPIO_OUTPUT', 'GPIO_INPUT', 'GPIO_PWM', 'GPIO_CLOCK'])
 
-export const DEFAULT_VISIBLE = [17, 27, 22, 24, 25, 5]
+export const DEFAULT_VISIBLE = [11, 13, 15, 18, 22, 29]
 
 // ─── Icon helper by device name ───────────────────────────────────────────────
 export function faFor(name: string): string {
