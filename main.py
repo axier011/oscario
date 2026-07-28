@@ -728,10 +728,64 @@ def _wa_config() -> tuple[str, str, str]:
 
 
 # ── ENDPOINTS — AUTH ────────────────────────────────────────
+
+def _get_client_ip(request: Request) -> str:
+    """Devuelve la IP real del cliente (compatible con Cloudflare)."""
+    for header in ("CF-Connecting-IP", "X-Real-IP", "X-Forwarded-For"):
+        val = request.headers.get(header)
+        if val:
+            return val.split(",")[0].strip()
+    return (request.client.host if request.client else "unknown")
+
+
+async def _get_location(ip: str) -> str:
+    """Resuelve la ubicación geográfica de una IP (ip-api.com, sin clave)."""
+    if ip in ("127.0.0.1", "::1", "localhost", "unknown"):
+        return "Red local"
+    try:
+        import urllib.request as _ureq
+        loop = asyncio.get_event_loop()
+        def _fetch():
+            with _ureq.urlopen(
+                f"http://ip-api.com/json/{ip}?fields=status,country,regionName,city",
+                timeout=3,
+            ) as r:
+                return json.loads(r.read())
+        data = await loop.run_in_executor(None, _fetch)
+        if data.get("status") == "success":
+            parts = [data.get("city"), data.get("regionName"), data.get("country")]
+            return ", ".join(p for p in parts if p)
+    except Exception:
+        pass
+    return ip
+
+
+async def _notify_login(request: Request, username: str, method: str, success: bool) -> None:
+    """Envía un mensaje Telegram con los detalles del intento de login."""
+    try:
+        from telegram_bot import notify_all
+        ip  = _get_client_ip(request)
+        loc = await _get_location(ip)
+        icon = "✅" if success else "⚠️"
+        status = "exitoso" if success else "FALLIDO"
+        msg = (
+            f"{icon} *Login {status}*\n"
+            f"👤 Usuario: `{username}`\n"
+            f"💻 Método: {method}\n"
+            f"🌍 IP: `{ip}`\n"
+            f"📍 Ubicación: {loc}"
+        )
+        await notify_all(msg, parse_mode="Markdown")
+    except Exception as _e:
+        logger.warning(f"No se pudo notificar login por Telegram: {_e}")
+
+
 @app.post("/api/v1/auth/login")
-async def login(body: LoginRequest):
+async def login(body: LoginRequest, request: Request):
     ac = _auth_cfg()
-    if body.username != ac["username"] or body.password != ac["password"]:
+    ok = (body.username == ac["username"] and body.password == ac["password"])
+    asyncio.create_task(_notify_login(request, body.username, "Contraseña", ok))
+    if not ok:
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
     return {"token": _make_token(body.username)}
 
@@ -866,6 +920,7 @@ async def wa_login_complete(request: Request):
             (v.new_sign_count, cred_id_b64url),
         )
         await db.commit()
+    asyncio.create_task(_notify_login(request, stored["username"], "Face ID / Windows Hello", True))
     return {"token": _make_token(stored["username"])}
 
 
