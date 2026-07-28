@@ -744,7 +744,7 @@ async def _get_location(ip: str) -> str:
         return "Red local"
     try:
         import urllib.request as _ureq
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         def _fetch():
             with _ureq.urlopen(
                 f"http://ip-api.com/json/{ip}?fields=status,country,regionName,city",
@@ -760,11 +760,11 @@ async def _get_location(ip: str) -> str:
     return ip
 
 
-async def _notify_login(request: Request, username: str, method: str, success: bool) -> None:
+async def _notify_login(username: str, ip: str, method: str, success: bool) -> None:
     """Envía un mensaje Telegram con los detalles del intento de login."""
+    logger.info(f"[login-notify] user={username} ip={ip} method={method} ok={success}")
     try:
         from telegram_bot import notify_all
-        ip  = _get_client_ip(request)
         loc = await _get_location(ip)
         icon = "✅" if success else "⚠️"
         status = "exitoso" if success else "FALLIDO"
@@ -775,7 +775,7 @@ async def _notify_login(request: Request, username: str, method: str, success: b
             f"🌍 IP: `{ip}`\n"
             f"📍 Ubicación: {loc}"
         )
-        await notify_all(msg, parse_mode="Markdown")
+        await notify_all(msg)
     except Exception as _e:
         logger.warning(f"No se pudo notificar login por Telegram: {_e}")
 
@@ -784,7 +784,8 @@ async def _notify_login(request: Request, username: str, method: str, success: b
 async def login(body: LoginRequest, request: Request):
     ac = _auth_cfg()
     ok = (body.username == ac["username"] and body.password == ac["password"])
-    asyncio.create_task(_notify_login(request, body.username, "Contraseña", ok))
+    ip = _get_client_ip(request)
+    await _notify_login(body.username, ip, "Contraseña", ok)
     if not ok:
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
     return {"token": _make_token(body.username)}
@@ -920,7 +921,7 @@ async def wa_login_complete(request: Request):
             (v.new_sign_count, cred_id_b64url),
         )
         await db.commit()
-    asyncio.create_task(_notify_login(request, stored["username"], "Face ID / Windows Hello", True))
+    await _notify_login(stored["username"], _get_client_ip(request), "Face ID / Windows Hello", True)
     return {"token": _make_token(stored["username"])}
 
 
@@ -1246,6 +1247,31 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(default=""
         manager.disconnect(websocket)
 
 
+# cooldown de visitas: IP → timestamp última notificación (10 min)
+_visit_cooldown: dict[str, float] = {}
+_VISIT_COOLDOWN_SEC = 600  # 10 minutos
+
+
+async def _notify_visit(ip: str) -> None:
+    """Notifica por Telegram cuando alguien carga la web (con cooldown por IP)."""
+    now = time.time()
+    if now - _visit_cooldown.get(ip, 0) < _VISIT_COOLDOWN_SEC:
+        return  # misma IP reciente, no spamear
+    _visit_cooldown[ip] = now
+    logger.info(f"[visit-notify] ip={ip}")
+    try:
+        from telegram_bot import notify_all
+        loc = await _get_location(ip)
+        msg = (
+            f"👁️ *Nueva visita a la web*\n"
+            f"🌍 IP: `{ip}`\n"
+            f"📍 Ubicación: {loc}"
+        )
+        await notify_all(msg)
+    except Exception as _e:
+        logger.warning(f"No se pudo notificar visita: {_e}")
+
+
 # ─────────────────────────────────────────────────────────────────
 # SERVIR FRONTEND ESTÁTICO
 # Sirve dist/index.html (build React) si existe, o index.html legacy
@@ -1258,7 +1284,9 @@ if os.path.isdir(_DIST):
 
 
 @app.get("/", include_in_schema=False)
-async def serve_index():
+async def serve_index(request: Request):
+    ip = _get_client_ip(request)
+    asyncio.create_task(_notify_visit(ip))
     return FileResponse(_INDEX)
 
 
