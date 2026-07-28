@@ -678,6 +678,22 @@ html[data-theme="light"] .gpio-pin-dot {
 }
 .login-btn:hover:not(:disabled) { opacity: .85; }
 .login-btn:disabled { opacity: .5; cursor: default; }
+.login-bio-btn {
+  width: 100%; padding: .65rem; border-radius: var(--rs); border: 1.5px solid var(--border);
+  background: transparent; color: var(--fg); font-size: .95rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: .5rem;
+  transition: border-color .15s, background .15s;
+}
+.login-bio-btn:hover:not(:disabled) { border-color: var(--teal); background: rgba(0,180,160,.08); }
+.login-bio-btn:disabled { opacity: .5; cursor: default; }
+
+/* Logout button */
+.logout-btn {
+  margin-left: .5rem; padding: .4rem .7rem; border-radius: var(--rs);
+  background: transparent; border: 1.5px solid var(--border);
+  color: var(--muted); cursor: pointer; font-size: .95rem; transition: color .15s, border-color .15s;
+}
+.logout-btn:hover { color: #f87171; border-color: #f87171; }
 .log-loading  { color: var(--t2); font-size: .78rem; }
 .log-empty    { text-align: center; padding: 32px 0; color: var(--t2); font-size: .85rem; }
 

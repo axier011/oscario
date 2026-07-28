@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useOsc } from '../hooks/useOscario'
+import { clearToken } from '../api'
 import type { Theme } from '../types'
 
 function applyTheme(theme: Theme) {
@@ -30,6 +31,11 @@ export default function TopBar() {
       return () => mq.removeEventListener('change', handler)
     }
   }, [theme])
+
+  function handleLogout() {
+    clearToken()
+    window.location.reload()
+  }
 
   const wsLabel = wsStatus === 'connected'
     ? 'WS conectado'
@@ -63,6 +69,10 @@ export default function TopBar() {
       <span className={`ws-pill ${wsStatus}`}>
         {wsLabel}
       </span>
+
+      <button className="logout-btn" onClick={handleLogout} title="Cerrar sesión">
+        <i className="fa-solid fa-right-from-bracket" />
+      </button>
     </header>
   )
 }

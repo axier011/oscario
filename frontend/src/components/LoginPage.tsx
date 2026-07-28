@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { apiLogin } from '../api'
+import { isWebAuthnAvailable, loginBiometric } from '../lib/webauthn'
 
 interface Props {
   onLogin: (token: string) => void
@@ -10,6 +11,12 @@ export default function LoginPage({ onLogin }: Props) {
   const [password, setPassword] = useState('')
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
+  const [bioAvail, setBioAvail] = useState(false)
+  const [bioLoading, setBioLoading] = useState(false)
+
+  useEffect(() => {
+    setBioAvail(isWebAuthnAvailable())
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -23,6 +30,25 @@ export default function LoginPage({ onLogin }: Props) {
       setError('Usuario o contraseña incorrectos')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleBiometric() {
+    setBioLoading(true)
+    setError('')
+    try {
+      const token = await loginBiometric()
+      localStorage.setItem('oscario-token', token)
+      onLogin(token)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.includes('Sin credenciales')) {
+        setError('No hay biometría registrada. Inicia sesión con contraseña y registírala desde Ajustes.')
+      } else {
+        setError('Verificación biométrica fallida')
+      }
+    } finally {
+      setBioLoading(false)
     }
   }
 
@@ -52,10 +78,22 @@ export default function LoginPage({ onLogin }: Props) {
             required
           />
           {error && <p className="login-error">{error}</p>}
-          <button className="login-btn" type="submit" disabled={loading}>
+          <button className="login-btn" type="submit" disabled={loading || bioLoading}>
             {loading ? 'Entrando...' : 'Entrar'}
           </button>
         </form>
+        {bioAvail && (
+          <button
+            className="login-bio-btn"
+            onClick={handleBiometric}
+            disabled={loading || bioLoading}
+          >
+            {bioLoading
+              ? <><i className="fa-solid fa-spinner fa-spin" /> Verificando...</>
+              : <><i className="fa-solid fa-fingerprint" /> Face ID / Windows Hello</>
+            }
+          </button>
+        )}
       </div>
     </div>
   )

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useOsc } from '../hooks/useOscario'
+import { getToken } from '../api'
+import { isWebAuthnAvailable, registerBiometric } from '../lib/webauthn'
 
 interface ActionState {
   loading: boolean
@@ -15,6 +17,7 @@ export default function SettingsTab() {
   const [pull,     setPull]     = useState<ActionState>(IDLE)
   const [push,     setPush]     = useState<ActionState>(IDLE)
   const [build,    setBuild]    = useState<ActionState>(IDLE)
+  const [bioState, setBioState] = useState<ActionState>(IDLE)
 
   // Cuando el WS se reconecta tras un reinicio, limpiar el mensaje
   useEffect(() => {
@@ -31,8 +34,12 @@ export default function SettingsTab() {
     label: string
   ) {
     setState({ loading: true, result: null, error: false })
+    const token = getToken()
     try {
-      const res  = await fetch(endpoint, { method: 'POST' })
+      const res  = await fetch(endpoint, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
       const data = await res.json()
       if (!res.ok) {
         setState({ loading: false, result: data.detail ?? 'Error desconocido', error: true })
@@ -46,8 +53,24 @@ export default function SettingsTab() {
       setState({ loading: false, result: 'No se pudo conectar con el servidor', error: true })
       addToast('off', 'No se pudo conectar con el servidor')
     } finally {
-      // Borrar el mensaje automáticamente tras 2 s
       setTimeout(() => setState(IDLE), 2_000)
+    }
+  }
+
+  async function handleRegisterBio() {
+    const token = getToken()
+    if (!token) return
+    setBioState({ loading: true, result: null, error: false })
+    try {
+      await registerBiometric(token)
+      setBioState({ loading: false, result: 'Biometría registrada correctamente', error: false })
+      addToast('ok', 'Face ID / Windows Hello registrado')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error desconocido'
+      setBioState({ loading: false, result: msg, error: true })
+      addToast('off', msg)
+    } finally {
+      setTimeout(() => setBioState(IDLE), 3_000)
     }
   }
 
@@ -169,6 +192,37 @@ export default function SettingsTab() {
               : <><i className="fa-solid fa-hammer" /> Build</>}
           </button>
         </div>
+
+        {/* Biometría */}
+        {isWebAuthnAvailable() && (
+          <div className="settings-card">
+            <div className="settings-card-icon" style={{ background: 'rgba(99,102,241,.15)', color: '#818cf8' }}>
+              <i className="fa-solid fa-fingerprint" />
+            </div>
+            <div className="settings-card-body">
+              <div className="settings-card-name">Face ID / Windows Hello</div>
+              <div className="settings-card-desc">
+                Registra tu biometría para acceder sin contraseña la próxima vez.
+              </div>
+              {bioState.result && (
+                <div className={`settings-output${bioState.error ? ' err' : ''}`}>
+                  {bioState.result}
+                </div>
+              )}
+            </div>
+            <button
+              className={`settings-btn${bioState.loading ? ' loading' : ''}`}
+              style={{ background: '#6366f1' }}
+              disabled={bioState.loading}
+              onClick={handleRegisterBio}
+            >
+              {bioState.loading
+                ? <><i className="fa-solid fa-spinner fa-spin" /> Registrando…</>
+                : <><i className="fa-solid fa-fingerprint" /> Registrar</>
+              }
+            </button>
+          </div>
+        )}
 
       </div>
     </div>

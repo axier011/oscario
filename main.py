@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 import aiosqlite
+import base64
 import configparser
 import hashlib
 import hmac
@@ -26,6 +27,18 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
+
+try:
+    import webauthn as _wa
+    from webauthn.helpers.structs import (
+        AuthenticatorSelectionCriteria,
+        PublicKeyCredentialDescriptor,
+        ResidentKeyRequirement,
+        UserVerificationRequirement,
+    )
+    WEBAUTHN_AVAILABLE = True
+except ImportError:
+    WEBAUTHN_AVAILABLE = False
 
 # ─────────────────────────────────────────────────────────────────
 # GPIO ABSTRACTION  (real RPi.GPIO o mock para desarrollo en PC)
@@ -242,6 +255,18 @@ async def init_db() -> None:
             )
         """)
         await db.execute("CREATE INDEX IF NOT EXISTS idx_sensor_name ON sensor_data(sensor_name)")
+
+        # ── webauthn_credentials ───────────────────────────
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS webauthn_credentials (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                credential_id TEXT NOT NULL UNIQUE,
+                public_key    TEXT NOT NULL,
+                sign_count    INTEGER NOT NULL DEFAULT 0,
+                username      TEXT NOT NULL,
+                created_at    TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now'))
+            )
+        """)
 
         await db.commit()
         logger.info("✅ Esquema de base de datos verificado/creado")
@@ -637,7 +662,23 @@ app.add_middleware(
 )
 
 # ── Middleware de autenticación ───────────────────────────────────
-_AUTH_EXEMPT = {"/api/v1/auth/login"}
+_AUTH_EXEMPT = {
+    "/api/v1/auth/login",
+    "/api/v1/auth/webauthn/login/begin",
+    "/api/v1/auth/webauthn/login/complete",
+    "/api/v1/auth/webauthn/status",
+}
+
+# ── Helpers WebAuthn ──────────────────────────────────────────────
+_wa_reg_challenges:  dict[str, bytes] = {}
+_wa_auth_challenges: dict[str, bytes] = {}
+
+def _wa_config() -> tuple[str, str, str]:
+    cfg = configparser.ConfigParser()
+    cfg.read(_CFG_PATH, encoding="utf-8")
+    rp_id  = cfg.get("auth", "webauthn_rp_id",  fallback="localhost")
+    origin = cfg.get("auth", "webauthn_origin", fallback="http://localhost:8000")
+    return rp_id, "Oscario", origin
 
 class _AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -674,9 +715,19 @@ class LoginRequest(BaseModel):
     password: str
 
 
-# ─────────────────────────────────────────────────────────────────
-# ENDPOINTS — AUTH
-# ─────────────────────────────────────────────────────────────────
+# ── Helpers WebAuthn ─────────────────────────────────────
+_wa_reg_challenges:  dict[str, bytes] = {}
+_wa_auth_challenges: dict[str, bytes] = {}
+
+def _wa_config() -> tuple[str, str, str]:
+    cfg = configparser.ConfigParser()
+    cfg.read(_CFG_PATH, encoding="utf-8")
+    rp_id  = cfg.get("auth", "webauthn_rp_id",  fallback="localhost")
+    origin = cfg.get("auth", "webauthn_origin", fallback="http://localhost:8000")
+    return rp_id, "Oscario", origin
+
+
+# ── ENDPOINTS — AUTH ────────────────────────────────────────
 @app.post("/api/v1/auth/login")
 async def login(body: LoginRequest):
     ac = _auth_cfg()
@@ -691,6 +742,131 @@ async def verify_token_endpoint(request: Request):
     if not token or not _verify_token(token):
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
     return {"valid": True}
+
+
+@app.get("/api/v1/auth/webauthn/status")
+async def wa_status():
+    async with get_db() as db:
+        async with db.execute("SELECT COUNT(*) FROM webauthn_credentials") as cur:
+            (count,) = await cur.fetchone()
+    return {"has_credentials": count > 0, "available": WEBAUTHN_AVAILABLE}
+
+
+@app.post("/api/v1/auth/webauthn/register/begin")
+async def wa_register_begin(request: Request):
+    if not WEBAUTHN_AVAILABLE:
+        raise HTTPException(503, "py-webauthn no instalado")
+    rp_id, rp_name, _ = _wa_config()
+    ac = _auth_cfg()
+    options = _wa.generate_registration_options(
+        rp_id=rp_id,
+        rp_name=rp_name,
+        user_id=ac["username"].encode(),
+        user_name=ac["username"],
+        user_display_name=ac["username"],
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            resident_key=ResidentKeyRequirement.PREFERRED,
+            user_verification=UserVerificationRequirement.REQUIRED,
+        ),
+    )
+    _wa_reg_challenges[ac["username"]] = options.challenge
+    return JSONResponse(json.loads(_wa.options_to_json(options)))
+
+
+@app.post("/api/v1/auth/webauthn/register/complete")
+async def wa_register_complete(request: Request):
+    if not WEBAUTHN_AVAILABLE:
+        raise HTTPException(503, "py-webauthn no instalado")
+    rp_id, _, origin = _wa_config()
+    ac = _auth_cfg()
+    challenge = _wa_reg_challenges.pop(ac["username"], None)
+    if not challenge:
+        raise HTTPException(400, "No hay registro pendiente")
+    body = await request.json()
+    try:
+        v = _wa.verify_registration_response(
+            credential=body,
+            expected_challenge=challenge,
+            expected_rp_id=rp_id,
+            expected_origin=origin,
+        )
+    except Exception as e:
+        raise HTTPException(400, f"Verificación fallida: {e}")
+    cred_id = base64.urlsafe_b64encode(v.credential_id).decode().rstrip("=")
+    pub_key = base64.b64encode(v.credential_public_key).decode()
+    async with get_db() as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO webauthn_credentials (credential_id, public_key, sign_count, username) VALUES (?,?,?,?)",
+            (cred_id, pub_key, v.sign_count, ac["username"]),
+        )
+        await db.commit()
+    return {"registered": True}
+
+
+@app.post("/api/v1/auth/webauthn/login/begin")
+async def wa_login_begin():
+    if not WEBAUTHN_AVAILABLE:
+        raise HTTPException(503, "py-webauthn no instalado")
+    rp_id, _, _ = _wa_config()
+    async with get_db() as db:
+        async with db.execute("SELECT credential_id FROM webauthn_credentials") as cur:
+            rows = [dict(r) for r in await cur.fetchall()]
+    if not rows:
+        raise HTTPException(404, "Sin credenciales registradas")
+    allow_creds = [
+        PublicKeyCredentialDescriptor(
+            id=base64.urlsafe_b64decode(r["credential_id"] + "==")
+        )
+        for r in rows
+    ]
+    options = _wa.generate_authentication_options(
+        rp_id=rp_id,
+        allow_credentials=allow_creds,
+        user_verification=UserVerificationRequirement.REQUIRED,
+    )
+    _wa_auth_challenges["pending"] = options.challenge
+    return JSONResponse(json.loads(_wa.options_to_json(options)))
+
+
+@app.post("/api/v1/auth/webauthn/login/complete")
+async def wa_login_complete(request: Request):
+    if not WEBAUTHN_AVAILABLE:
+        raise HTTPException(503, "py-webauthn no instalado")
+    rp_id, _, origin = _wa_config()
+    challenge = _wa_auth_challenges.pop("pending", None)
+    if not challenge:
+        raise HTTPException(400, "No hay autenticación pendiente")
+    body = await request.json()
+    # Buscar credencial por id
+    cred_id_b64url = body.get("id", "")
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT * FROM webauthn_credentials WHERE credential_id = ?", (cred_id_b64url,)
+        ) as cur:
+            stored = await cur.fetchone()
+    if not stored:
+        raise HTTPException(404, "Credencial no encontrada")
+    stored = dict(stored)
+    try:
+        v = _wa.verify_authentication_response(
+            credential=body,
+            expected_challenge=challenge,
+            expected_rp_id=rp_id,
+            expected_origin=origin,
+            credential_public_key=base64.b64decode(stored["public_key"]),
+            credential_current_sign_count=int(stored["sign_count"]),
+            require_user_verification=True,
+        )
+    except Exception as e:
+        raise HTTPException(400, f"Verificación fallida: {e}")
+    # Actualizar sign_count
+    async with get_db() as db:
+        await db.execute(
+            "UPDATE webauthn_credentials SET sign_count = ? WHERE credential_id = ?",
+            (v.new_sign_count, cred_id_b64url),
+        )
+        await db.commit()
+    return {"token": _make_token(stored["username"])}
 
 
 class VoiceLogRequest(BaseModel):

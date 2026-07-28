@@ -9,11 +9,7 @@ import SettingsTab from './components/SettingsTab'
 import Toast       from './components/Toast'
 import type { TabId } from './types'
 
-export default function App() {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('oscario-token'))
-
-  if (!token) return <LoginPage onLogin={setToken} />
-
+function AuthenticatedApp() {
   const oscario = useOscario()
 
   const [activeTab, setActiveTab] = useState<TabId>(() => {
@@ -74,4 +70,10 @@ export default function App() {
       </div>
     </OscarioCtx.Provider>
   )
+}
+
+export default function App() {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('oscario-token'))
+  if (!token) return <LoginPage onLogin={setToken} />
+  return <AuthenticatedApp />
 }
