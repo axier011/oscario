@@ -1092,7 +1092,7 @@ function onMsg(m){
     m.pins.forEach(p=>pins[p.pin_number]=p);
     buildControlPage(); buildMatrix(); updateStats(); buildScenes(); updateHealth();
     m.recent_logs.forEach(l=>addLog(l,false));
-    document.getElementById('gpio-mode').textContent=m.gpio_available?'GPIO: Hardware':'GPIO: Simulación';
+    const gm=document.getElementById('gpio-mode'); if(gm) gm.textContent=m.gpio_available?'GPIO: Hardware':'GPIO: Simulación';
   } else if(m.event==='GPIO_TOGGLE'){
     if(pins[m.pin_number]) pins[m.pin_number].current_state=m.new_state;
     updateCard(m.pin_number); events++; updateStats(); updateHealth();
@@ -1223,6 +1223,7 @@ document.addEventListener('keydown',e=>{if(e.key==='r'&&!e.ctrlKey&&!e.metaKey){
 }});
 
 (async()=>{
+  buildScenes();
   try{
     const[sr,lr]=await Promise.all([fetch(`${API}/gpio/status`),fetch(`${API}/logs?page_size=30`)]);
     if(sr.ok){const d=await sr.json();d.pins.forEach(p=>pins[p.pin_number]=p);buildControlPage();updateStats();buildScenes();updateHealth();}
