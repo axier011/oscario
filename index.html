@@ -1,0 +1,1035 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AquaPi — Panel de Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" />
+  <style>
+    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+    :root {
+      --bg:      #111418;
+      --surface: #181c22;
+      --card:    #1e2330;
+      --hover:   #242b3a;
+      --border:  rgba(255,255,255,.08);
+      --t1:#e8ecf2; --t2:#8a96a8; --t3:#3e4a5c;
+      --blue:  #4a90d9; --teal:#26a69a; --green:#43a868;
+      --amber:#c8882a; --red:#c0444a; --purple:#7c60cc;
+      --font: 'Nunito', 'Segoe UI', sans-serif;
+      --mono: 'Source Code Pro', monospace;
+      --r:10px; --rs:6px; --tr:120ms ease;
+      /* pin colors */
+      --c5v:   #c0444a;
+      --c33v:  #d4762a;
+      --cgnd:  #3e4a5c;
+      --cout:  #4a90d9;
+      --cin:   #43a868;
+      --cspi:  #7c60cc;
+      --ci2c:  #c8882a;
+      --cuart: #b06040;
+      --cpwm:  #26a69a;
+      --cclk:  #6a90b0;
+      --cid:   #2e3848;
+    }
+    html { font-size:14px; }
+    body { min-height:100vh; background:var(--bg); color:var(--t1); font-family:var(--font); -webkit-font-smoothing:antialiased; -webkit-text-size-adjust:100%; }
+    * { -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+    input, select, button { touch-action:manipulation; }
+    ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-thumb { background:var(--hover); border-radius:2px; }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      height:52px; display:flex; align-items:center; justify-content:space-between;
+      padding:0 22px; background:var(--surface); border-bottom:1px solid var(--border);
+      position:sticky; top:0; z-index:200;
+    }
+    .brand { display:flex; align-items:center; gap:9px; }
+    .brand-ico { width:30px; height:30px; border-radius:7px; background:linear-gradient(135deg,var(--teal),var(--blue)); display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; }
+    .brand-name { font-size:15px; font-weight:800; letter-spacing:-.2px; }
+    .brand-sep  { color:var(--t3); margin:0 3px; }
+    .brand-sub  { font-size:11px; color:var(--t3); font-weight:500; }
+    .topbar-r   { display:flex; align-items:center; gap:10px; }
+    .pill { display:flex; align-items:center; gap:5px; padding:4px 10px; border-radius:20px; border:1px solid; font-size:11px; font-weight:700; }
+    .pill.on   { color:var(--green);  border-color:rgba(67,168,104,.3);  background:rgba(67,168,104,.08);  }
+    .pill.off  { color:var(--red);    border-color:rgba(192,68,74,.3);   background:rgba(192,68,74,.08);   }
+    .pill.wait { color:var(--amber);  border-color:rgba(200,136,42,.3);  background:rgba(200,136,42,.08);  }
+    .pill-dot  { width:6px; height:6px; border-radius:50%; background:currentColor; }
+    .pill.on .pill-dot { animation:blink 2s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1}50%{opacity:.25} }
+    .clock { font-family:var(--mono); font-size:11px; color:var(--t3); }
+    .gpio-badge { font-size:10px; color:var(--t3); background:var(--card); border:1px solid var(--border); border-radius:5px; padding:3px 8px; font-family:var(--mono); }
+
+    /* ── TABS ── */
+    .tabs { display:flex; gap:2px; padding:14px 22px 0; border-bottom:1px solid var(--border); background:var(--surface); }
+    .tab { padding:8px 16px; border-radius:var(--rs) var(--rs) 0 0; font-size:13px; font-weight:700; cursor:pointer; color:var(--t3); border:1px solid transparent; border-bottom:none; transition:all var(--tr); display:flex; align-items:center; gap:6px; }
+    .tab:hover { color:var(--t2); background:rgba(255,255,255,.03); }
+    .tab.active { color:var(--t1); background:var(--bg); border-color:var(--border); }
+
+    /* ── PAGE ── */
+    .page { display:none; padding:20px 22px; }
+    .page.active { display:block; }
+
+    /* ── CONTROL PAGE ── */
+    .ctrl-layout { display:grid; grid-template-columns:1fr 320px; gap:18px; align-items:start; }
+    @media(max-width:980px){ .ctrl-layout { grid-template-columns:1fr; } }
+
+    /* Stats */
+    .stat-strip { display:grid; grid-template-columns:repeat(4,1fr); gap:9px; margin-bottom:18px; }
+    .stat-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:13px 15px; display:flex; align-items:center; gap:12px; }
+    .stat-ico { width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+    .stat-txt .stat-n { font-family:var(--mono); font-size:22px; font-weight:700; line-height:1; }
+    .stat-txt .stat-l { font-size:10px; color:var(--t3); text-transform:uppercase; letter-spacing:.8px; margin-top:2px; font-weight:600; }
+
+    /* Section label */
+    .sec-lbl { font-size:10px; font-weight:800; color:var(--t3); text-transform:uppercase; letter-spacing:1.2px; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+    .sec-lbl::after { content:''; flex:1; height:1px; background:var(--border); }
+
+    /* Pin cards */
+    .pin-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:9px; margin-bottom:20px; }
+    .pin-card {
+      background:var(--surface); border:1.5px solid var(--border); border-radius:var(--r);
+      padding:14px 13px 12px; cursor:pointer; transition:all var(--tr); user-select:none; position:relative;
+    }
+    .pin-card:hover { border-color:var(--pc); background:var(--hover); }
+    .pin-card.state-on { border-color:var(--pc); background:var(--hover); box-shadow:0 0 0 1px var(--pc) inset; }
+
+    .pc-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:11px; }
+    .pc-icon-wrap { width:36px; height:36px; border-radius:8px; background:rgba(255,255,255,.05); display:flex; align-items:center; justify-content:center; font-size:15px; transition:all var(--tr); }
+    .pin-card.state-on .pc-icon-wrap { background:var(--pc); color:#fff; }
+    .pc-icon-wrap i { transition:color var(--tr); }
+    .pin-card:not(.state-on) .pc-icon-wrap i { color:var(--pc); }
+
+    /* Toggle pill */
+    .pc-tog { width:38px; height:21px; border-radius:11px; border:1.5px solid rgba(255,255,255,.12); background:rgba(255,255,255,.07); position:relative; transition:all var(--tr); }
+    .pc-tog::after { content:''; position:absolute; width:15px; height:15px; border-radius:50%; background:#fff; top:1px; left:1px; transition:all var(--tr); box-shadow:0 1px 3px rgba(0,0,0,.5); }
+    .pin-card.state-on .pc-tog { background:var(--pc); border-color:var(--pc); }
+    .pin-card.state-on .pc-tog::after { left:20px; }
+
+    .pc-name { font-size:12px; font-weight:700; color:var(--t1); line-height:1.35; margin-bottom:2px; }
+    .pc-meta { font-size:10px; color:var(--t3); font-family:var(--mono); margin-bottom:8px; }
+    .pc-state { font-size:10px; font-weight:700; display:flex; align-items:center; gap:4px; }
+    .pc-state.on { color:var(--green); } .pc-state.off { color:var(--t3); }
+
+    /* Info pins */
+    .info-pins { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:6px; }
+    .info-pin { background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:8px 10px; display:flex; align-items:center; gap:8px; }
+    .info-pin-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+    .info-pin-name { font-size:10px; font-weight:600; color:var(--t2); line-height:1.3; }
+    .info-pin-num  { font-family:var(--mono); font-size:9px; color:var(--t3); }
+
+    /* ── RIGHT PANEL ── */
+    .right-stack { display:flex; flex-direction:column; gap:13px; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
+    .card-hdr { display:flex; align-items:center; justify-content:space-between; padding:11px 14px; border-bottom:1px solid var(--border); }
+    .card-title { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:700; color:var(--t1); }
+    .card-ico { width:22px; height:22px; border-radius:5px; background:var(--card); display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--t2); }
+    .card-tag { font-family:var(--mono); font-size:9px; padding:2px 7px; border-radius:7px; background:var(--card); border:1px solid var(--border); color:var(--t3); }
+
+    /* Sensors */
+    .sensor-g { display:grid; grid-template-columns:1fr 1fr; gap:7px; padding:10px; }
+    .sensor-tile { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:11px; }
+    .st-lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.9px; color:var(--t3); margin-bottom:4px; display:flex; align-items:center; gap:4px; }
+    .st-val { font-family:var(--mono); font-size:20px; font-weight:700; line-height:1; }
+    .st-unit { font-size:9px; color:var(--t3); margin-top:1px; }
+    .st-time { font-family:var(--mono); font-size:8px; color:var(--t3); margin-top:5px; }
+
+    /* Log */
+    .log-tb { display:flex; align-items:center; gap:6px; }
+    .log-sel { background:var(--card); border:1px solid var(--border); border-radius:5px; color:var(--t2); font-size:10px; padding:3px 6px; outline:none; cursor:pointer; font-family:var(--font); }
+    .log-list { height:280px; overflow-y:auto; }
+    .log-empty { height:100%; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--t3); }
+    .log-row { display:grid; grid-template-columns:3px 1fr; gap:0 10px; padding:8px 13px; border-bottom:1px solid var(--border); animation:fadeIn .18s ease; }
+    .log-row:last-child { border-bottom:none; }
+    .log-row:hover { background:rgba(255,255,255,.015); }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none} }
+    .log-bar { border-radius:2px; }
+    .log-b { display:flex; flex-direction:column; gap:2px; min-width:0; }
+    .log-r1 { display:flex; align-items:center; gap:5px; }
+    .log-nm { font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px; }
+    .log-src { font-family:var(--mono); font-size:8px; padding:1px 5px; border-radius:5px; border:1px solid; white-space:nowrap; font-weight:600; }
+    .src-WEB_APP         { color:var(--blue);   border-color:rgba(74,144,217,.3);  background:rgba(74,144,217,.08);  }
+    .src-PHYSICAL_BUTTON { color:var(--green);  border-color:rgba(67,168,104,.3);  background:rgba(67,168,104,.08);  }
+    .src-TELEGRAM_BOT    { color:var(--teal);   border-color:rgba(38,166,154,.3);  background:rgba(38,166,154,.08);  }
+    .src-VOICE_ASSISTANT { color:var(--purple); border-color:rgba(124,96,204,.3);  background:rgba(124,96,204,.08);  }
+    .src-CRON_SCHEDULE,.src-AUTOMATION { color:var(--amber); border-color:rgba(200,136,42,.3); background:rgba(200,136,42,.08); }
+    .log-r2 { display:flex; align-items:center; gap:5px; font-family:var(--mono); font-size:9px; color:var(--t3); }
+    .s-on { color:var(--green); font-weight:700; } .s-off { color:var(--red); font-weight:700; }
+
+    /* ══ MAP PAGE ══ */
+    #tab-map.active {
+      display:flex; flex-direction:column; padding:16px 22px;
+      height:calc(100vh - 52px - 48px);
+      height:calc(100dvh - 52px - 48px);
+      overflow:hidden;
+    }
+    .map-page { flex:1; display:flex; justify-content:center; align-items:stretch; min-height:0; }
+
+    /* Connector: narrow like the physical header, full height */
+    .connector-wrap {
+      background:var(--surface); border:1px solid var(--border); border-radius:var(--r);
+      padding:14px 16px; display:flex; flex-direction:column; width:fit-content; min-height:0;
+    }
+    .conn-header { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-shrink:0; }
+    .conn-header-txt { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--t3); }
+    /* rows container fills remaining height */
+    #gpio-matrix > div { flex:1; min-height:0; }
+    /* label columns: fixed width, rows distribute height evenly */
+    .conn-labels { display:flex; flex-direction:column; width:170px; }
+    .conn-labels .clabel { flex:1; }
+    /* physical connector body: narrow two-dot columns */
+    .conn-body { background:var(--card); border:1px solid rgba(255,255,255,.1); border-radius:8px; padding:6px 10px; display:flex; flex-direction:column; gap:0; width:fit-content; flex-shrink:0; }
+
+    .clabel {
+      flex:1; display:flex; align-items:center; font-size:11.5px; font-weight:600;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      padding:0 5px; min-height:0; min-width:0;
+    }
+    .clabel.right { justify-content:flex-start; padding-left:7px; }
+    .clabel.left  { justify-content:flex-end;   padding-right:7px; }
+    .clabel.dim { color:var(--t3); opacity:.32; font-weight:400; font-size:10.5px; }
+    .clabel.active-label { color:var(--lc); font-weight:700; }
+
+    .cpin {
+      width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+      cursor:pointer; position:relative; flex-shrink:0;
+    }
+    .cpin-dot {
+      width:22px; height:22px; border-radius:50%;
+      border:2px solid rgba(255,255,255,.12); background:var(--card);
+      display:flex; align-items:center; justify-content:center;
+      font-family:var(--mono); font-size:8px; color:var(--t3);
+      transition:background .12s ease, border-color .12s ease, box-shadow .12s ease;
+      box-shadow:0 1px 3px rgba(0,0,0,.4); flex-shrink:0;
+    }
+    /* controlable OFF → rojo */
+    .cpin.ctrl-off .cpin-dot { background:rgba(176,48,64,.18); border-color:var(--red); color:var(--red); }
+    .cpin.ctrl-off:hover .cpin-dot { background:rgba(176,48,64,.35); transform:scale(1.12); }
+    /* controlable ON → verde parpadeante */
+    .cpin.ctrl-on .cpin-dot { background:var(--green); border-color:var(--green); color:#fff; animation:pin-pulse 1.8s ease-in-out infinite; }
+    @keyframes pin-pulse {
+      0%,100% { box-shadow:0 0 0 0 rgba(67,168,104,.7); }
+      50%      { box-shadow:0 0 0 6px rgba(67,168,104,0); }
+    }
+    /* power pins (5V, 3.3V, GND) → color fijo */
+    .cpin.power .cpin-dot { background:var(--pc); border-color:var(--pc); color:#fff; opacity:.9; cursor:default; }
+    /* dim/irrelevant */
+    .cpin.dim .cpin-dot { opacity:.13; cursor:default; }
+    .cpin.dim:hover .cpin-dot { transform:none; }
+
+    /* Legend */
+    .map-legend { display:flex; flex-wrap:wrap; gap:5px 14px; margin-bottom:14px; }
+    .leg { display:flex; align-items:center; gap:5px; font-size:10px; color:var(--t2); font-weight:600; }
+    .leg-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+
+    /* ── CONTEXT MENU ── */
+    .ctx-menu {
+      position:fixed; z-index:600; min-width:190px;
+      background:var(--surface); border:1px solid var(--border); border-radius:9px;
+      box-shadow:0 8px 32px rgba(0,0,0,.45); overflow:hidden;
+      animation:ctx-in .12s ease;
+    }
+    @keyframes ctx-in { from{opacity:0;transform:scale(.95)} to{opacity:1;transform:none} }
+    .ctx-header {
+      padding:9px 13px 7px; border-bottom:1px solid var(--border);
+      font-size:11px; color:var(--t3); font-weight:600; text-transform:uppercase; letter-spacing:.7px;
+    }
+    .ctx-item {
+      display:flex; align-items:center; gap:9px; padding:9px 13px;
+      font-size:13px; font-weight:600; cursor:pointer; transition:background var(--tr);
+    }
+    .ctx-item:hover { background:var(--hover); }
+    .ctx-item i { width:14px; text-align:center; font-size:12px; color:var(--t3); }
+    .ctx-item.danger { color:var(--red); }
+    .ctx-item.danger i { color:var(--red); }
+    .ctx-item.success { color:var(--green); }
+    .ctx-item.success i { color:var(--green); }
+    .ctx-sep { height:1px; background:var(--border); margin:2px 0; }
+    /* Rename modal */
+    .rename-modal {
+      position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:700;
+      display:flex; align-items:center; justify-content:center;
+      animation:fadeIn .15s ease;
+    }
+    .rename-box {
+      background:var(--surface); border:1px solid var(--border); border-radius:var(--r);
+      padding:20px; width:320px; box-shadow:0 12px 40px rgba(0,0,0,.5);
+    }
+    .rename-box label { display:block; font-size:11px; font-weight:700; color:var(--t3); text-transform:uppercase; letter-spacing:.8px; margin-bottom:7px; }
+    .rename-box input {
+      width:100%; background:var(--card); border:1.5px solid var(--border); border-radius:7px;
+      color:var(--t1); font-family:var(--font); font-size:14px; font-weight:700;
+      padding:9px 11px; outline:none; transition:border-color var(--tr); margin-bottom:12px;
+    }
+    .rename-box input:focus { border-color:var(--blue); }
+    .rename-box .rename-btns { display:flex; gap:8px; justify-content:flex-end; }
+    .rename-box .rename-btns button { padding:8px 18px; border-radius:7px; border:none; font-family:var(--font); font-size:12px; font-weight:700; cursor:pointer; transition:all var(--tr); }
+    .rename-box .btn-cancel { background:var(--card); color:var(--t2); border:1px solid var(--border); }
+    .rename-box .btn-cancel:hover { background:var(--hover); }
+    .rename-box .btn-save { background:var(--blue); color:#fff; }
+    .rename-box .btn-save:hover { filter:brightness(1.1); }
+    .leg { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--t2); font-weight:600; }
+    .leg-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+
+    /* ── TOAST ── */
+    .toast-stack { position:fixed; bottom:16px; right:16px; display:flex; flex-direction:column; gap:6px; z-index:999; }
+    .toast { display:flex; align-items:center; gap:8px; padding:9px 13px; background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--tc,var(--blue)); border-radius:8px; font-size:12px; font-weight:600; min-width:180px; max-width:280px; box-shadow:0 6px 24px rgba(0,0,0,.5); animation:tin .18s ease, tout .18s ease 2.8s forwards; }
+    @keyframes tin  { from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none} }
+    @keyframes tout { to{opacity:0;transform:translateX(8px)} }
+
+    footer { padding:10px 22px; border-top:1px solid var(--border); display:flex; justify-content:space-between; font-size:10px; color:var(--t3); flex-wrap:wrap; gap:6px; }
+    footer a { color:var(--blue); text-decoration:none; font-weight:600; }
+
+    /* ── LIGHT MODE ── */
+    html[data-theme="light"] {
+      --bg:      #f0f2f5;
+      --surface: #ffffff;
+      --card:    #f7f8fa;
+      --hover:   #eef0f4;
+      --border:  rgba(0,0,0,.09);
+      --t1:#1a1f2e; --t2:#4a5568; --t3:#9aa3b2;
+      --blue:  #2e72c2; --teal:#0e8c80; --green:#2e8a50;
+      --amber:#b06a10; --red:#b03040; --purple:#5a40b0;
+      --c5v:#b03040; --c33v:#b06a10; --cgnd:#9aa3b2;
+      --cout:#2e72c2; --cin:#2e8a50; --cspi:#5a40b0;
+      --ci2c:#b06a10; --cuart:#8a4828; --cpwm:#0e8c80;
+      --cclk:#4870a0; --cid:#b0b8c8;
+    }
+    html[data-theme="light"] ::-webkit-scrollbar-thumb { background:var(--hover); }
+    html[data-theme="light"] .conn-body { background:#e8eaf0; border-color:rgba(0,0,0,.1); }
+    html[data-theme="light"] .cpin-dot { background:#e0e3ea; box-shadow:0 1px 3px rgba(0,0,0,.15); }
+    html[data-theme="light"] .map-btn:disabled { background:#e8eaf0; }
+    html[data-theme="light"] .log-sel { color:var(--t1); }
+
+    /* ────────────────────────────────
+       RESPONSIVE
+    ──────────────────────────────── */
+
+    /* ── Tablet (≤ 768px) ── */
+    @media (max-width: 768px) {
+      html { font-size:13px; }
+
+      .topbar { padding:0 14px; height:50px; }
+      .brand-sep, .brand-sub { display:none; }
+      .gpio-badge { display:none; }
+      .clock { display:none; }
+
+      .tabs { padding:10px 14px 0; gap:2px; }
+      .tab  { padding:7px 12px; font-size:12px; gap:5px; }
+
+      .page { padding:14px; }
+      #tab-map.active { padding:12px 14px; height:calc(100dvh - 50px - 42px); }
+
+      .stat-strip { grid-template-columns:repeat(2,1fr); gap:8px; }
+      .stat-box   { padding:11px 12px; }
+      .stat-txt .stat-n { font-size:20px; }
+
+      .ctrl-layout { grid-template-columns:1fr; }
+
+      .pin-cards { grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; }
+
+      .bulk-btns { flex-wrap:wrap; }
+      .bulk-btn  { flex:1; justify-content:center; padding:8px 10px; }
+
+      .log-list { height:220px; }
+
+      /* Map: narrower labels */
+      .conn-labels { width:130px; }
+      .clabel { font-size:10.5px; }
+      .clabel.dim { font-size:9.5px; }
+
+      .map-legend-strip { gap:4px 12px; }
+
+      footer { padding:8px 14px; }
+      .toast-stack { bottom:10px; right:10px; left:10px; }
+      .toast { min-width:0; max-width:100%; }
+
+      .modal-box, .rename-box { width:90%; max-width:340px; padding:18px; }
+    }
+
+    /* ── Móvil (≤ 480px) ── */
+    @media (max-width: 480px) {
+      .topbar { height:48px; }
+      .brand-name { font-size:14px; }
+
+      .tabs { padding:8px 10px 0; }
+      .tab  { padding:6px 10px; font-size:11px; }
+      .tab i { font-size:11px; }
+
+      .page { padding:10px; }
+      #tab-map.active { padding:10px; height:calc(100dvh - 48px - 40px); }
+
+      .stat-strip { gap:6px; }
+      .stat-box   { padding:9px 10px; gap:8px; }
+      .stat-ico   { width:28px; height:28px; font-size:12px; }
+      .stat-txt .stat-n { font-size:18px; }
+      .stat-txt .stat-l { font-size:9px; }
+
+      .pin-cards { grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:7px; }
+      .pc-icon-wrap { width:30px; height:30px; font-size:13px; }
+      .pc-name { font-size:11px; }
+      .pc-tog  { width:34px; height:19px; }
+      .pc-tog::after { width:13px; height:13px; }
+      .pin-card.state-on .pc-tog::after { left:18px; }
+
+      /* Map: very narrow labels, scrollable if needed */
+      .connector-wrap { padding:10px 8px; }
+      .conn-labels { width:100px; }
+      .clabel { font-size:9.5px; padding:0 3px; }
+      .clabel.dim { font-size:8.5px; }
+      .cpin { width:24px; height:24px; }
+      .cpin-dot { width:19px; height:19px; font-size:7px; }
+      .conn-body { padding:4px 6px; }
+
+      .map-legend-strip { gap:3px 10px; font-size:10px; }
+
+      .log-list { height:180px; }
+      .log-nm { max-width:100px; }
+
+      footer { display:none; }
+
+      .toast-stack { bottom:8px; right:8px; left:8px; }
+      .toast { font-size:11px; padding:8px 11px; }
+
+      .modal-box, .rename-box { width:94%; padding:16px; }
+      .modal-title { font-size:14px; }
+    }
+
+    /* ── Muy pequeño (≤ 360px) ── */
+    @media (max-width: 360px) {
+      .conn-labels { width:82px; }
+      .clabel { font-size:8.5px; }
+      .clabel.dim { opacity:.25; font-size:8px; }
+      .pin-cards { grid-template-columns:1fr 1fr; }
+    }
+
+    /* ── ICON BUTTONS (topbar) ── */
+    .icon-btn {
+      width:30px; height:30px; border-radius:7px; border:1px solid var(--border);
+      background:var(--card); color:var(--t2); font-size:12px;
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; transition:all var(--tr);
+    }
+    .icon-btn:hover { background:var(--hover); color:var(--t1); }
+    .icon-btn.danger:hover { background:rgba(176,48,64,.15); color:var(--red); border-color:rgba(176,48,64,.3); }
+
+    /* ── ALL TOGGLE BUTTONS ── */
+    .bulk-btns { display:flex; gap:7px; margin-bottom:14px; }
+    .bulk-btn {
+      display:flex; align-items:center; gap:6px; padding:7px 14px; border-radius:7px;
+      border:1.5px solid var(--border); background:var(--surface); color:var(--t2);
+      font-family:var(--font); font-size:11px; font-weight:700; cursor:pointer; transition:all var(--tr);
+    }
+    .bulk-btn:hover { background:var(--hover); color:var(--t1); border-color:var(--t3); }
+    .bulk-btn.all-on:hover  { background:rgba(67,168,104,.1); color:var(--green); border-color:rgba(67,168,104,.4); }
+    .bulk-btn.all-off:hover { background:rgba(176,48,64,.1);  color:var(--red);   border-color:rgba(176,48,64,.35); }
+
+    /* ── CONFIRM MODAL ── */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:500; display:flex; align-items:center; justify-content:center; animation:fadeIn .15s ease; }
+    .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:24px; width:320px; box-shadow:0 16px 48px rgba(0,0,0,.5); }
+    .modal-ico { font-size:28px; margin-bottom:10px; }
+    .modal-title { font-size:15px; font-weight:800; margin-bottom:6px; }
+    .modal-body  { font-size:12px; color:var(--t2); margin-bottom:18px; line-height:1.6; }
+    .modal-body code { font-family:var(--mono); background:var(--card); padding:2px 6px; border-radius:4px; color:var(--t1); }
+    .modal-btns  { display:flex; gap:8px; justify-content:flex-end; }
+    .modal-btn { padding:8px 18px; border-radius:7px; border:none; font-family:var(--font); font-size:12px; font-weight:700; cursor:pointer; transition:all var(--tr); }
+    .modal-btn.cancel { background:var(--card); color:var(--t2); border:1px solid var(--border); }
+    .modal-btn.cancel:hover { background:var(--hover); color:var(--t1); }
+    .modal-btn.confirm { background:var(--red); color:#fff; }
+    .modal-btn.confirm:hover { filter:brightness(1.1); }
+  </style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-ico"><i class="fa-solid fa-fish"></i></div>
+    <span class="brand-name">AquaPi</span>
+    <span class="brand-sep">/</span>
+    <span class="brand-sub">Raspberry Pi 4B</span>
+  </div>
+  <div class="topbar-r">
+    <span class="gpio-badge" id="gpio-mode">GPIO: —</span>
+    <div class="pill wait" id="ws-pill"><div class="pill-dot"></div><span id="ws-lbl">Conectando</span></div>
+    <span class="clock" id="clock">--:--:--</span>
+    <button class="icon-btn" onclick="toggleTheme()" title="Modo claro/oscuro" id="theme-btn"><i class="fa-solid fa-moon"></i></button>
+    <button class="icon-btn danger" onclick="confirmRestart()" title="Reiniciar servicio acuario-api"><i class="fa-solid fa-arrows-rotate"></i></button>
+  </div>
+</header>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" onclick="showTab('ctrl',this)"><i class="fa-solid fa-sliders"></i> Control GPIO</div>
+  <div class="tab" onclick="showTab('map',this)"><i class="fa-solid fa-microchip"></i> Mapa de Pines</div>
+</div>
+
+<!-- ══ TAB CONTROL ══ -->
+<div class="page active" id="tab-ctrl">
+  <div class="ctrl-layout">
+    <div>
+      <!-- Stats -->
+      <div class="stat-strip">
+        <div class="stat-box">
+          <div class="stat-ico" style="background:rgba(74,144,217,.12);color:var(--blue)"><i class="fa-solid fa-circle-nodes"></i></div>
+          <div class="stat-txt"><div class="stat-n" style="color:var(--blue)" id="st-total">40</div><div class="stat-l">Total pines</div></div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-ico" style="background:rgba(67,168,104,.12);color:var(--green)"><i class="fa-solid fa-bolt"></i></div>
+          <div class="stat-txt"><div class="stat-n" style="color:var(--green)" id="st-act">0</div><div class="stat-l">Activos HIGH</div></div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-ico" style="background:rgba(124,96,204,.12);color:var(--purple)"><i class="fa-solid fa-toggle-on"></i></div>
+          <div class="stat-txt"><div class="stat-n" style="color:var(--purple)" id="st-out">0</div><div class="stat-l">Controlables</div></div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-ico" style="background:rgba(200,136,42,.12);color:var(--amber)"><i class="fa-solid fa-clock-rotate-left"></i></div>
+          <div class="stat-txt"><div class="stat-n" style="color:var(--amber)" id="st-ev">0</div><div class="stat-l">Eventos</div></div>
+        </div>
+      </div>
+
+      <div class="sec-lbl"><i class="fa-solid fa-toggle-on" style="color:var(--blue)"></i> Pines controlables</div>
+      <div class="bulk-btns">
+        <button class="bulk-btn all-on"  onclick="allPins(1)"><i class="fa-solid fa-power-off"></i> Encender todo</button>
+        <button class="bulk-btn all-off" onclick="allPins(0)"><i class="fa-solid fa-power-off" style="opacity:.5"></i> Apagar todo</button>
+      </div>
+      <div class="pin-cards" id="pin-cards"></div>
+
+      <div class="sec-lbl" style="margin-top:6px"><i class="fa-solid fa-lock" style="color:var(--t3)"></i> Pines de sistema</div>
+      <div class="info-pins" id="info-pins"></div>
+    </div>
+
+    <div class="right-stack">
+      <!-- Sensors -->
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-title"><div class="card-ico"><i class="fa-solid fa-gauge-high"></i></div> Sensores</div>
+          <span class="card-tag">Tiempo real</span>
+        </div>
+        <div class="sensor-g" style="grid-template-columns:1fr 1fr">
+          <div class="sensor-tile" style="grid-column:1/-1">
+            <div class="st-lbl"><i class="fa-solid fa-temperature-half"></i> Temperatura del agua</div>
+            <div style="display:flex;align-items:baseline;gap:6px">
+              <div class="st-val" id="s-temp" style="color:var(--teal);font-size:32px">—</div>
+              <div class="st-unit" style="font-size:14px">°C</div>
+            </div>
+            <div class="st-time" id="s-temp-t">Sin datos</div>
+          </div>
+          <div class="sensor-tile" style="grid-column:1/-1">
+            <div class="st-lbl"><i class="fa-solid fa-microchip"></i> Temperatura CPU</div>
+            <div style="display:flex;align-items:baseline;gap:6px">
+              <div class="st-val" id="s-cpu" style="color:var(--red);font-size:32px">—</div>
+              <div class="st-unit" style="font-size:14px">°C</div>
+            </div>
+            <div class="st-time" id="s-cpu-t">Sin datos</div>
+          </div>
+          <!-- IDs mantenidos para compatibilidad con WS, pero ocultos -->
+          <span id="s-ph" style="display:none"></span><span id="s-ph-t" style="display:none"></span>
+          <span id="s-nivel" style="display:none"></span><span id="s-nivel-t" style="display:none"></span>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-title">
+            <div class="card-ico"><i class="fa-solid fa-list-ul"></i></div>
+            Eventos
+            <span class="card-tag" id="log-badge">0</span>
+          </div>
+          <select class="log-sel" id="log-filter" onchange="renderLog()">
+            <option value="">Todos</option>
+            <option value="WEB_APP">Web App</option>
+            <option value="PHYSICAL_BUTTON">Botón</option>
+            <option value="TELEGRAM_BOT">Telegram</option>
+            <option value="VOICE_ASSISTANT">Voz</option>
+            <option value="CRON_SCHEDULE">Programado</option>
+          </select>
+        </div>
+        <div class="log-list" id="log-list"><div class="log-empty">Sin eventos aún</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TAB MAP ══ -->
+<div class="page" id="tab-map">
+  <div class="map-legend-strip">
+    <div class="leg"><div class="leg-dot" style="background:var(--green);box-shadow:0 0 6px var(--green)"></div>Encendido</div>
+    <div class="leg"><div class="leg-dot" style="background:var(--red)"></div>Apagado</div>
+    <div class="leg"><div class="leg-dot" style="background:var(--c5v)"></div>5V</div>
+    <div class="leg"><div class="leg-dot" style="background:var(--c33v)"></div>3.3V</div>
+    <div class="leg"><div class="leg-dot" style="background:#555"></div>GND</div>
+    <div class="leg" style="opacity:.4"><div class="leg-dot" style="background:#444"></div>Sin acceso</div>
+  </div>
+  <div class="map-page">
+    <div class="connector-wrap">
+      <div class="conn-header">
+        <i class="fa-solid fa-microchip" style="color:var(--t3)"></i>
+        <span class="conn-header-txt">J8 · GPIO Header · Raspberry Pi 4B</span>
+      </div>
+      <div id="gpio-matrix" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden"></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span><i class="fa-solid fa-fish"></i> AquaPi — FastAPI + SQLite WAL + WebSockets</span>
+  <span><a href="/docs" target="_blank">/docs</a> · <a href="/health" target="_blank">/health</a></span>
+</footer>
+
+<!-- RENAME MODAL -->
+<div id="rename-modal" style="display:none"></div>
+
+<!-- CONTEXT MENU -->
+<div id="ctx-menu" class="ctx-menu" style="display:none"></div>
+
+<!-- CONFIRM MODAL -->
+<div id="modal-overlay" style="display:none"></div>
+
+<div class="toast-stack" id="toast-stack"></div>
+
+<script>
+const API = `${location.protocol}//${location.host}/api/v1`;
+const WS  = `${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`;
+const MLOGS = 200;
+
+/* ── PIN TYPE META ── */
+const PM = {
+  POWER_5V:    {c:'var(--c5v)',   g:'rgba(192,68,74,.4)',   ctrl:false, icon:'fa-bolt',          label:'5V'},
+  POWER_3V3:   {c:'var(--c33v)', g:'rgba(212,118,42,.4)',  ctrl:false, icon:'fa-bolt',          label:'3.3V'},
+  GROUND:      {c:'#4a5568',     g:'transparent',           ctrl:false, icon:'fa-minus',         label:'GND'},
+  GPIO_OUTPUT: {c:'var(--cout)', g:'rgba(74,144,217,.5)',   ctrl:true,  icon:'fa-lightbulb',     label:'Salida'},
+  GPIO_INPUT:  {c:'var(--cin)',  g:'rgba(67,168,104,.5)',   ctrl:true,  icon:'fa-circle-dot',    label:'Entrada'},
+  GPIO_SPI:    {c:'var(--cspi)', g:'rgba(124,96,204,.4)',   ctrl:false, icon:'fa-arrow-right-arrow-left', label:'SPI'},
+  GPIO_I2C:    {c:'var(--ci2c)', g:'rgba(200,136,42,.4)',   ctrl:false, icon:'fa-link',          label:'I²C'},
+  GPIO_UART:   {c:'var(--cuart)',g:'rgba(176,96,64,.4)',    ctrl:false, icon:'fa-wave-square',   label:'UART'},
+  GPIO_PWM:    {c:'var(--cpwm)', g:'rgba(38,166,154,.5)',   ctrl:true,  icon:'fa-rotate',        label:'PWM'},
+  GPIO_CLOCK:  {c:'var(--cclk)', g:'rgba(106,144,176,.5)',  ctrl:true,  icon:'fa-clock',         label:'Clock'},
+  ID_EEPROM:   {c:'var(--cid)',  g:'transparent',           ctrl:false, icon:'fa-lock',          label:'EEPROM'},
+};
+const CTRL = new Set(['GPIO_OUTPUT','GPIO_INPUT','GPIO_PWM','GPIO_CLOCK']);
+const RELEVANT = new Set(['POWER_5V','POWER_3V3','GROUND','GPIO_OUTPUT','GPIO_INPUT','GPIO_PWM','GPIO_CLOCK']);
+
+/* ── FA icon map by device name ── */
+const NAME_ICONS = {
+  // luces
+  'luz blanca':'fa-sun',   'blanca':'fa-sun',
+  'luz azul':'fa-moon',    'azul':'fa-moon',
+  'luz':'fa-lightbulb',    'led':'fa-lightbulb',   'lamp':'fa-lightbulb',
+  // agua
+  'filtro':'fa-filter',    'filter':'fa-filter',
+  'bomba':'fa-droplet',    'agua':'fa-droplet',
+  // oxigenador
+  'oxigena':'fa-wind',     'oxigen':'fa-wind',     'oxi':'fa-wind',
+  // comedero
+  'comede':'fa-utensils',  'aliment':'fa-utensils','feeder':'fa-utensils',
+  // calentador
+  'calentador':'fa-temperature-arrow-up', 'calefac':'fa-temperature-arrow-up', 'calor':'fa-temperature-arrow-up', 'heater':'fa-temperature-arrow-up',
+  // otros
+  'motor':'fa-gear',       'servo':'fa-gear',      'ventil':'fa-fan',
+  'relay':'fa-plug',       'rele':'fa-plug',
+};
+function faFor(name){
+  const n=name.toLowerCase();
+  // sort by key length descending so 'luz blanca' matches before 'luz'
+  const sorted=Object.entries(NAME_ICONS).sort((a,b)=>b[0].length-a[0].length);
+  for(const[k,v] of sorted) if(n.includes(k)) return v;
+  return 'fa-plug';
+}
+
+let pins={}, logs=[], events=0, ws, wsT, wsA=0;
+
+/* ── CLOCK ── */
+function tick(){
+  const d=new Date();
+  document.getElementById('clock').textContent=
+    d.toLocaleTimeString('es-ES')+' · '+d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit'});
+}
+setInterval(tick,1000); tick();
+
+/* ── TABS ── */
+function showTab(id,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-'+id).classList.add('active');
+  localStorage.setItem('aquapi-tab',id);
+  if(id==='map') buildMatrix();
+}
+(()=>{
+  const saved=localStorage.getItem('aquapi-tab');
+  if(saved&&saved!=='ctrl'){
+    const tab=document.querySelector(`.tab[onclick*="'${saved}'"]`);
+    if(tab) showTab(saved,tab);
+  }
+})();
+
+/* ── BUILD CONTROL PAGE ── */
+function buildControlPage(){
+  const cardEl=document.getElementById('pin-cards');
+  const infoEl=document.getElementById('info-pins');
+  cardEl.innerHTML=''; infoEl.innerHTML='';
+
+  const sorted=Object.values(pins).sort((a,b)=>a.pin_number-b.pin_number);
+  sorted.filter(p=>CTRL.has(p.pin_type)).forEach(p=>{
+    const m=PM[p.pin_type]||PM.GROUND;
+    const on=parseInt(p.current_state)===1;
+    const fa=faFor(p.name);
+    const div=document.createElement('div');
+    div.className=`pin-card ${on?'state-on':''}`;
+    div.id=`pc-${p.pin_number}`;
+    div.style.setProperty('--pc',m.c);
+    div.innerHTML=`
+      <div class="pc-head">
+        <div class="pc-icon-wrap"><i class="fa-solid ${fa}"></i></div>
+        <div class="pc-tog" id="pct-${p.pin_number}"></div>
+      </div>
+      <div class="pc-name">${p.name}</div>
+      <div class="pc-meta">Pin ${p.pin_number}${p.bcm_number>=0?' · BCM '+p.bcm_number:''}</div>
+      <div class="pc-state ${on?'on':'off'}" id="pcst-${p.pin_number}">
+        <i class="fa-solid ${on?'fa-circle-dot':'fa-circle'}"></i> ${on?'Encendido':'Apagado'}
+      </div>`;
+    div.addEventListener('click',()=>doToggle(p.pin_number));
+    cardEl.appendChild(div);
+  });
+
+  sorted.filter(p=>!CTRL.has(p.pin_type)).forEach(p=>{
+    const m=PM[p.pin_type]||PM.GROUND;
+    const div=document.createElement('div');
+    div.className='info-pin';
+    div.innerHTML=`<div class="info-pin-dot" style="background:${m.c}"></div><div><div class="info-pin-name">${p.name}</div><div class="info-pin-num">Pin ${p.pin_number}</div></div>`;
+    infoEl.appendChild(div);
+  });
+}
+
+/* ── UPDATE SINGLE CARD ── */
+function updateCard(pin_number){
+  const p=pins[pin_number]; if(!p) return;
+  const on=parseInt(p.current_state)===1;
+  const card=document.getElementById(`pc-${pin_number}`);
+  if(card){
+    card.classList.toggle('state-on',on);
+    const st=document.getElementById(`pcst-${pin_number}`);
+    if(st){ st.className=`pc-state ${on?'on':'off'}`; st.innerHTML=`<i class="fa-solid ${on?'fa-circle-dot':'fa-circle'}"></i> ${on?'Encendido':'Apagado'}`; }
+  }
+  updateCpin(pin_number);
+  updateStats();
+}
+
+/* ── STATS ── */
+function updateStats(){
+  const all=Object.values(pins);
+  document.getElementById('st-act').textContent=all.filter(p=>parseInt(p.current_state)===1&&CTRL.has(p.pin_type)).length;
+  document.getElementById('st-out').textContent=all.filter(p=>CTRL.has(p.pin_type)).length;
+  document.getElementById('st-ev').textContent=events;
+}
+
+/* ══ CONNECTOR DIAGRAM ══
+   Layout: [left-labels col] [pin body: 2 narrow cols] [right-labels col]
+   Rows distribute evenly in the available height (flex:1 per row).
+   Width is fixed/compact — mirrors the physical RPi J8 header.
+══ */
+function buildMatrix(){
+  const el=document.getElementById('gpio-matrix'); el.innerHTML='';
+
+  const leftLabels  = document.createElement('div'); leftLabels.className='conn-labels';
+  const rightLabels = document.createElement('div'); rightLabels.className='conn-labels';
+  const body        = document.createElement('div'); body.className='conn-body';
+  body.style.cssText='display:flex;flex-direction:column;gap:2px';
+
+  for(let row=0;row<20;row++){
+    const lp=row*2+1, rp=row*2+2;
+    leftLabels.appendChild(makeLabel(lp,'left'));
+    rightLabels.appendChild(makeLabel(rp,'right'));
+    const r=document.createElement('div');
+    r.style.cssText='display:flex;gap:3px;flex:1;min-height:0;align-items:center';
+    r.appendChild(makeCpin(lp));
+    r.appendChild(makeCpin(rp));
+    body.appendChild(r);
+  }
+
+  const wrap=document.createElement('div');
+  wrap.style.cssText='flex:1;display:flex;align-items:stretch;min-height:0';
+  wrap.appendChild(leftLabels); wrap.appendChild(body); wrap.appendChild(rightLabels);
+  el.appendChild(wrap);
+}
+
+function makeLabel(n,side){
+  const p=pins[n]; const m=p?(PM[p.pin_type]||PM.GROUND):null;
+  const rel=p&&RELEVANT.has(p.pin_type);
+  const div=document.createElement('div');
+  div.className=`clabel ${side} ${rel?'active-label':'dim'}`;
+  if(rel) div.style.setProperty('--lc',m.c);
+  if(p){
+    const short = p.name.length>18?p.name.slice(0,17)+'…':p.name;
+    div.innerHTML=rel
+      ?`<span style="color:${m.c}">${short}</span> <span style="color:var(--t3);font-family:var(--mono);font-size:9px">${n}</span>`
+      :`<span>${p.name.replace('GPIO ','')}</span> <span style="font-family:var(--mono);font-size:9px">${n}</span>`;
+  } else {
+    div.textContent=`Pin ${n}`;
+  }
+  return div;
+}
+
+function makeCpin(n){
+  const p=pins[n]; const m=p?(PM[p.pin_type]||PM.GROUND):{c:'#2e3848',g:'transparent',ctrl:false};
+  const rel=p&&RELEVANT.has(p.pin_type);
+  const isCtrl=p&&CTRL.has(p.pin_type);
+  const isPwr=p&&(p.pin_type==='POWER_5V'||p.pin_type==='POWER_3V3'||p.pin_type==='GROUND');
+  const on=p&&parseInt(p.current_state)===1;
+
+  const wrap=document.createElement('div'); wrap.className='cpin';
+  wrap.id=`dot-${n}`;
+  wrap.style.setProperty('--pc', m.c);
+  wrap.style.setProperty('--pg', m.g);
+
+  if(!rel)         wrap.classList.add('dim');
+  else if(isPwr)   wrap.classList.add('power');
+  else if(isCtrl)  wrap.classList.add(on?'ctrl-on':'ctrl-off');
+  else             wrap.classList.add('dim');
+
+  const dot=document.createElement('div'); dot.className='cpin-dot'; dot.textContent=n;
+  wrap.appendChild(dot);
+  if(isCtrl) wrap.addEventListener('click',()=>doToggle(n));
+  wrap.addEventListener('contextmenu', e=>{ e.preventDefault(); showCtxMenu(e, n); });
+  return wrap;
+}
+
+function updateCpin(n){
+  const wrap=document.getElementById(`dot-${n}`); if(!wrap) return;
+  const p=pins[n]; if(!p) return;
+  const m=PM[p.pin_type]||PM.GROUND;
+  const on=parseInt(p.current_state)===1;
+  const isCtrl=CTRL.has(p.pin_type);
+  const isPwr=p.pin_type==='POWER_5V'||p.pin_type==='POWER_3V3'||p.pin_type==='GROUND';
+  wrap.className='cpin';
+  wrap.style.setProperty('--pc',m.c); wrap.style.setProperty('--pg',m.g);
+  if(!RELEVANT.has(p.pin_type)) wrap.classList.add('dim');
+  else if(isPwr)  wrap.classList.add('power');
+  else if(isCtrl) wrap.classList.add(on?'ctrl-on':'ctrl-off');
+  else            wrap.classList.add('dim');
+}
+
+/* ── CONTEXT MENU ── */
+let ctxPin=null;
+function showCtxMenu(e, n){
+  ctxPin=n;
+  const p=pins[n]; if(!p) return;
+  const m=PM[p.pin_type]||PM.GROUND;
+  const on=parseInt(p.current_state)===1;
+  const ctrl=CTRL.has(p.pin_type);
+  const menu=document.getElementById('ctx-menu');
+
+  menu.innerHTML=`
+    <div class="ctx-header"><i class="fa-solid fa-circle" style="color:${m.c};font-size:8px"></i> &nbsp;Pin ${n} — ${p.name}</div>
+    ${ctrl?`
+      <div class="ctx-item ${on?'danger':'success'}" onclick="ctxToggle()"><i class="fa-solid fa-power-off"></i> ${on?'Apagar pin':'Encender pin'}</div>
+      <div class="ctx-sep"></div>
+    `:''}
+    <div class="ctx-item" onclick="openRenameModal()"><i class="fa-solid fa-pencil"></i> Renombrar pin…</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" style="color:var(--t3);cursor:default;font-size:11px"><i class="fa-solid fa-microchip"></i> ${m.label} &middot; BCM ${p.bcm_number>=0?p.bcm_number:'N/A'}</div>
+  `;
+
+  menu.style.display='block';
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const mw=menu.offsetWidth||200, mh=menu.offsetHeight||160;
+  menu.style.left=(e.clientX+mw>vw?e.clientX-mw:e.clientX)+'px';
+  menu.style.top =(e.clientY+mh>vh?e.clientY-mh:e.clientY)+'px';
+
+  // close on next outside click — stopProp on menu itself so clicking items doesn't close it
+  menu.onclick=ev=>ev.stopPropagation();
+  setTimeout(()=>document.addEventListener('click', closeCtxOnce), 0);
+}
+function closeCtxOnce(){ closeCtxMenu(); document.removeEventListener('click', closeCtxOnce); }
+function closeCtxMenu(){ document.getElementById('ctx-menu').style.display='none'; }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeCtxMenu(); closeRenameModal(); } });
+
+function ctxToggle(){
+  const n=ctxPin; closeCtxMenu();
+  if(n!==null) doToggle(n);
+}
+
+/* ── RENAME MODAL ── */
+function openRenameModal(){
+  const n=ctxPin; closeCtxMenu();
+  if(n===null) return;
+  const p=pins[n]; if(!p) return;
+  const m=document.getElementById('rename-modal');
+  m.className='rename-modal';
+  m.innerHTML=`
+    <div class="rename-box">
+      <label><i class="fa-solid fa-pencil"></i> &nbsp;Renombrar Pin ${n}</label>
+      <input id="rename-input" type="text" maxlength="64"
+        value="${p.name.replace(/"/g,'&quot;')}"
+        placeholder="Nombre del dispositivo" />
+      <div class="rename-btns">
+        <button class="btn-cancel" onclick="closeRenameModal()">Cancelar</button>
+        <button class="btn-save" onclick="saveRename(${n})"><i class="fa-solid fa-check"></i> Guardar</button>
+      </div>
+    </div>`;
+  m.style.display='flex';
+  const inp=document.getElementById('rename-input');
+  inp.focus(); inp.select();
+  inp.addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter') saveRename(n); if(e.key==='Escape') closeRenameModal(); });
+  m.addEventListener('click',e=>{ if(e.target===m) closeRenameModal(); });
+}
+function closeRenameModal(){ document.getElementById('rename-modal').style.display='none'; }
+async function saveRename(n){
+  const name=document.getElementById('rename-input')?.value?.trim();
+  if(!name) return;
+  closeRenameModal();
+  try{
+    const r=await fetch(`${API}/gpio/pin/${n}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name})
+    });
+    if(r.ok){
+      const d=await r.json();
+      pins[n].name=d.pin.name;
+      buildControlPage(); buildMatrix();
+      toast(`✓ Renombrado a "${d.pin.name}"`, 'ok');
+    } else { const e=await r.json(); toast(e.detail||'Error','error'); }
+  }catch{ toast('Sin conexión','error'); }
+}
+
+/* ── TOGGLE ── */
+async function doToggle(n,src='WEB_APP'){
+  try{
+    const r=await fetch(`${API}/gpio/toggle/${n}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:src,metadata:{ua:navigator.userAgent.slice(0,40)}})});
+    if(!r.ok){const e=await r.json();toast(e.detail||'Error','error');}
+  }catch{ toast('Sin conexión','error'); }
+}
+
+/* ── WEBSOCKET ── */
+function connectWS(){
+  setBadge('wait','Conectando…');
+  ws=new WebSocket(WS);
+  ws.onopen=()=>{ wsA=0; setBadge('on','Conectado'); hb(); };
+  ws.onclose=()=>{ setBadge('off','Desconectado'); wsT=setTimeout(connectWS,Math.min(2000*(wsA+1),12000)); wsA++; };
+  ws.onerror=()=>{};
+  ws.onmessage=e=>{ try{onMsg(JSON.parse(e.data));}catch{} };
+}
+let hbI; function hb(){ clearInterval(hbI); hbI=setInterval(()=>{if(ws?.readyState===1)ws.send(JSON.stringify({type:'PING'}));},25000); }
+
+function onMsg(m){
+  if(m.event==='INITIAL_STATE'){
+    m.pins.forEach(p=>pins[p.pin_number]=p);
+    buildControlPage(); buildMatrix(); updateStats();
+    m.recent_logs.forEach(l=>addLog(l,false));
+    document.getElementById('gpio-mode').textContent=m.gpio_available?'GPIO: Hardware':'GPIO: Simulación';
+  } else if(m.event==='GPIO_TOGGLE'){
+    if(pins[m.pin_number]) pins[m.pin_number].current_state=m.new_state;
+    updateCard(m.pin_number); events++; updateStats();
+    addLog({pin_number:m.pin_number,name:m.name,old_state:m.old_state,new_state:m.new_state,source:m.source,metadata:m.metadata,created_at:m.timestamp},true);
+    toast(`${m.name}  →  ${m.new_state?'Encendido':'Apagado'}`,m.new_state?'on':'off');
+  } else if(m.event==='PIN_RENAMED'){
+    if(pins[m.pin_number]) pins[m.pin_number].name=m.name;
+    buildControlPage(); buildMatrix();
+  } else if(m.event==='SENSOR_DATA'){
+    updSensor(m);
+  }
+}
+
+/* ── LOG ── */
+function addLog(e,_){
+  logs.unshift(e); if(logs.length>MLOGS)logs.pop();
+  document.getElementById('log-badge').textContent=logs.length;
+  renderLog();
+}
+function renderLog(){
+  const f=document.getElementById('log-filter').value;
+  const el=document.getElementById('log-list');
+  const data=f?logs.filter(l=>l.source===f):logs;
+  if(!data.length){el.innerHTML='<div class="log-empty">Sin eventos aún</div>';return;}
+  el.innerHTML=data.map(e=>{
+    const p=pins[e.pin_number]||{};const m=PM[p.pin_type]||{c:'var(--blue)'};
+    const name=e.name||p.name||`Pin ${e.pin_number}`;const on=parseInt(e.new_state)===1;
+    return `<div class="log-row"><div class="log-bar" style="background:${m.c}"></div><div class="log-b"><div class="log-r1"><span class="log-nm">${name}</span><span class="log-src src-${e.source||'WEB_APP'}">${(e.source||'WEB').replace('_',' ')}</span></div><div class="log-r2"><span>LOW</span><span>→</span><span class="${on?'s-on':'s-off'}">${on?'HIGH ▲':'LOW ▼'}</span><span style="margin-left:4px">${fmtT(e.created_at)}</span></div></div></div>`;
+  }).join('');
+}
+function fmtT(ts){try{const d=new Date(ts);return d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch{return ts||'';}}
+
+/* ── SENSORS ── */
+const SM={'DS18B20_Temperatura':['s-temp','s-temp-t'],'pH_Sensor':['s-ph','s-ph-t'],'Nivel_Agua':['s-nivel','s-nivel-t'],'CPU_Temp':['s-cpu','s-cpu-t']};
+function updSensor(m){const ids=SM[m.sensor_name];if(!ids)return;const v=document.getElementById(ids[0]),t=document.getElementById(ids[1]);if(v)v.textContent=parseFloat(m.value).toFixed(1);if(t)t.textContent=fmtT(m.timestamp);}
+
+/* ── BADGE ── */
+function setBadge(s,l){const p=document.getElementById('ws-pill'),lb=document.getElementById('ws-lbl');p.className=`pill ${s}`;lb.textContent=l;}
+
+/* ── TOAST ── */
+function toast(text,type='ok'){
+  const c={ok:'var(--teal)',on:'var(--green)',off:'var(--red)',error:'var(--red)'};
+  const t=document.createElement('div');t.className='toast';t.style.setProperty('--tc',c[type]||c.ok);
+  t.innerHTML=`<i class="fa-solid ${type==='error'?'fa-triangle-exclamation':type==='on'?'fa-circle-check':'fa-circle-info'}"></i> ${text}`;
+  document.getElementById('toast-stack').appendChild(t);setTimeout(()=>t.remove(),3200);
+}
+
+/* ── THEME ── */
+function toggleTheme(){
+  const html=document.documentElement;
+  const isDark=html.getAttribute('data-theme')!=='light';
+  html.setAttribute('data-theme', isDark?'light':'dark');
+  const btn=document.getElementById('theme-btn');
+  btn.innerHTML=isDark?'<i class="fa-solid fa-sun"></i>':'<i class="fa-solid fa-moon"></i>';
+  localStorage.setItem('aquapi-theme', isDark?'light':'dark');
+}
+(()=>{ const t=localStorage.getItem('aquapi-theme'); if(t) document.documentElement.setAttribute('data-theme',t); const isDark=document.documentElement.getAttribute('data-theme')!=='light'; document.getElementById('theme-btn').innerHTML=isDark?'<i class="fa-solid fa-moon"></i>':'<i class="fa-solid fa-sun"></i>'; })();
+
+/* ── BULK TOGGLE ── */
+async function allPins(state){
+  const ctrlPins=Object.values(pins).filter(p=>CTRL.has(p.pin_type));
+  const toToggle=ctrlPins.filter(p=>parseInt(p.current_state)!==state);
+  if(!toToggle.length){ toast(`Todos ya están ${state?'encendidos':'apagados'}`,'ok'); return; }
+  toast(`${state?'Encendiendo':'Apagando'} ${toToggle.length} pines…`,'ok');
+  for(const p of toToggle){ await doToggle(p.pin_number); await new Promise(r=>setTimeout(r,80)); }
+}
+
+/* ── RESTART SERVICE ── */
+function confirmRestart(){
+  const ov=document.getElementById('modal-overlay');
+  ov.style.display='flex';
+  ov.className='modal-overlay';
+  ov.innerHTML=`<div class="modal-box">
+    <div class="modal-ico">⚙️</div>
+    <div class="modal-title">Reiniciar servicio</div>
+    <div class="modal-body">Se ejecutará:<br><code>sudo systemctl restart acuario-api</code><br><br>La conexión WebSocket se perderá brevemente.</div>
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="closeModal()">Cancelar</button>
+      <button class="modal-btn confirm" onclick="doRestart()"><i class="fa-solid fa-arrows-rotate"></i> Reiniciar</button>
+    </div>
+  </div>`;
+}
+function closeModal(){ document.getElementById('modal-overlay').style.display='none'; }
+function closeModalOnOverlay(e){ if(e.target.id==='modal-overlay') closeModal(); }
+document.getElementById('modal-overlay').addEventListener('click', closeModalOnOverlay);
+async function doRestart(){
+  closeModal();
+  try{
+    const r=await fetch(`${API}/system/restart`,{method:'POST'});
+    const d=await r.json();
+    if(r.ok) toast(d.message||'Reiniciando…','ok');
+    else toast(d.detail||'Error al reiniciar','error');
+  }catch{ toast('Sin conexión con el servidor','error'); }
+}
+
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
+document.addEventListener('keydown',e=>{if(e.key==='r'&&!e.ctrlKey&&!e.metaKey){
+  fetch(`${API}/gpio/status`).then(r=>r.json()).then(d=>{d.pins.forEach(p=>pins[p.pin_number]=p);buildControlPage();buildMatrix();updateStats();toast('Estado actualizado');}).catch(()=>toast('Error','error'));
+}});
+
+(async()=>{
+  try{
+    const[sr,lr]=await Promise.all([fetch(`${API}/gpio/status`),fetch(`${API}/logs?page_size=30`)]);
+    if(sr.ok){const d=await sr.json();d.pins.forEach(p=>pins[p.pin_number]=p);buildControlPage();updateStats();}
+    if(lr.ok){const d=await lr.json();d.logs.forEach(l=>addLog(l,false));}
+  }catch{}
+  connectWS();
+})();
+</script>
+</body>
+</html>

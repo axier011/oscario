@@ -1,0 +1,13 @@
+# AquaPi Control System — Dependencias Python
+# Instalar con: pip install -r requirements.txt
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.1
+aiosqlite>=0.20.0
+pydantic>=2.9.0
+
+# Opcional: solo instalar en la Raspberry Pi real
+# RPi.GPIO==0.7.1          # GPIO hardware
+# python-telegram-bot==21.0 # Bot de Telegram
+# SpeechRecognition==3.10.0 # Voz
+# gTTS==2.5.1              # Text-to-Speech
