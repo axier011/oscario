@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useOsc } from '../hooks/useOscario'
 import { PM, faFor, TOGGLEABLE_FE } from '../constants'
-import { apiSetPin } from '../api'
+import { apiSetPin, apiSimulatePress } from '../api'
 import ContextMenu  from './ContextMenu'
 import RenameModal  from './RenameModal'
 
@@ -12,7 +12,8 @@ export default function PinCard({ pinNumber }: Props) {
   const pin = pins[pinNumber]
 
   // Declarado antes de los callbacks para evitar TDZ
-  const isFeed = pin?.name.toLowerCase().includes('comedero') ?? false
+  const isFeed    = pin?.name.toLowerCase().includes('comedero') ?? false
+  const isPumpkin  = pin?.pin_type === 'BTN_PUMPKIN'
 
   const [ctxPos,     setCtxPos]     = useState<{ x: number; y: number } | null>(null)
   const [showRename, setShowRename] = useState(false)
@@ -22,6 +23,13 @@ export default function PinCard({ pinNumber }: Props) {
   const handleClick = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!pin) return
+
+    // Calabaza: simula pulsación → dispara PUMPKIN_PRESS → abre modal agente
+    if (isPumpkin) {
+      try { await apiSimulatePress(pin.pin_number) } catch { /* ignore */ }
+      return
+    }
+
     if (!TOGGLEABLE_FE.has(pin.pin_type)) return   // entradas físicas: solo lectura
     if (isFeed) {
       const luzBlanca = Object.values(pins).find(p => p.name.toLowerCase().includes('blanca'))
@@ -41,7 +49,7 @@ export default function PinCard({ pinNumber }: Props) {
     await togglePin(pinNumber)
     addToast(pin.current_state === 1 ? 'off' : 'on',
       `${pin.name} ${pin.current_state === 1 ? 'apagado' : 'encendido'}`)
-  }, [pin, pinNumber, isFeed, togglePin, addToast])
+  }, [pin, pinNumber, isFeed, isPumpkin, togglePin, addToast])
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -81,23 +89,25 @@ export default function PinCard({ pinNumber }: Props) {
   return (
     <>
       <div
-        className={`pin-card${isOn ? ' state-on' : ''}${!isToggleable ? ' readonly' : ''}`}
+        className={`pin-card${isOn ? ' state-on' : ''}${(!isToggleable && !isPumpkin) ? ' readonly' : ''}${isPumpkin ? ' pumpkin' : ''}`}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
-        title={!isToggleable ? 'Entrada física — solo lectura' : undefined}
+        title={isPumpkin ? '🎃 Pulsar para abrir asistente' : undefined}
       >
         <div className="pc-row">
           <div className={`pc-icon-circle${isOn ? ' on' : ''}`}>
-            <i className={`fa-solid ${icon}`} />
+            <i className={`fa-solid ${isPumpkin ? 'fa-ghost' : icon}`} />
           </div>
           <span className="pc-name" title={pin.name}>{pin.name}</span>
-          {isToggleable
-            ? <div
-                className={`ios-toggle${isOn ? ' on' : ''}`}
-                onClick={handleClick}
-                title={isOn ? 'Apagar' : 'Encender'}
-              />
-            : <i className="fa-solid fa-lock" style={{ color: 'var(--t3)', fontSize: 13 }} title="Entrada física" />
+          {isPumpkin
+            ? <span style={{ fontSize: '1.3rem', cursor: 'pointer' }} title="Abrir asistente">🎃</span>
+            : isToggleable
+              ? <div
+                  className={`ios-toggle${isOn ? ' on' : ''}`}
+                  onClick={handleClick}
+                  title={isOn ? 'Apagar' : 'Encender'}
+                />
+              : <i className="fa-solid fa-lock" style={{ color: 'var(--t3)', fontSize: 13 }} title="Entrada física" />
           }
         </div>
 

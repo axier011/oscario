@@ -23,7 +23,7 @@ export const PM: Record<string, { c: string; ctrl: boolean; icon: string; label:
 export const CTRL_TYPES = new Set(['GPIO_OUTPUT', 'GPIO_INPUT', 'GPIO_PWM', 'GPIO_CLOCK', 'BTN_WEB', 'BTN_PHYSICAL', 'BTN_PUMPKIN'])
 
 /** Tipos que se pueden encender/apagar desde la web (excluye entradas físicas) */
-export const TOGGLEABLE_FE = new Set(['GPIO_OUTPUT', 'GPIO_PWM', 'GPIO_CLOCK', 'BTN_WEB', 'BTN_PUMPKIN'])
+export const TOGGLEABLE_FE = new Set(['GPIO_OUTPUT', 'GPIO_PWM', 'GPIO_CLOCK', 'BTN_WEB'])
 
 // ─── Pin groups ───────────────────────────────────────────────────────────────
 export const PIN_GROUPS = {

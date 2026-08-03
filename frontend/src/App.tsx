@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { OscarioCtx, useOscario } from './hooks/useOscario'
-import LoginPage  from './components/LoginPage'
-import TopBar      from './components/TopBar'
-import ControlTab  from './components/ControlTab'
-import GpioMap     from './components/GpioMap'
-import LogHistory  from './components/LogHistory'
-import SettingsTab from './components/SettingsTab'
-import Toast       from './components/Toast'
+import LoginPage     from './components/LoginPage'
+import TopBar        from './components/TopBar'
+import ControlTab    from './components/ControlTab'
+import GpioMap       from './components/GpioMap'
+import LogHistory    from './components/LogHistory'
+import SettingsTab   from './components/SettingsTab'
+import Toast         from './components/Toast'
+import PumpkinModal  from './components/PumpkinModal'
 import type { TabId } from './types'
 
 function AuthenticatedApp() {
   const oscario = useOscario()
+  const { pumpkinPressed, clearPumpkin } = oscario
 
   const [activeTab, setActiveTab] = useState<TabId>(() => {
     return (localStorage.getItem('aquapi-tab') as TabId | null) ?? 'ctrl'
@@ -67,6 +69,7 @@ function AuthenticatedApp() {
         </main>
 
         <Toast />
+        {pumpkinPressed && <PumpkinModal onClose={clearPumpkin} />}
       </div>
     </OscarioCtx.Provider>
   )

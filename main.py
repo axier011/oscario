@@ -139,7 +139,7 @@ DEFAULT_PINS: list[tuple] = [
 CONTROLLABLE_TYPES = {"GPIO_OUTPUT", "GPIO_INPUT", "GPIO_PWM", "GPIO_CLOCK",
                       "BTN_WEB", "BTN_PHYSICAL", "BTN_PUMPKIN"}
 TOGGLEABLE_TYPES   = {"GPIO_OUTPUT", "GPIO_PWM", "GPIO_CLOCK",
-                      "BTN_WEB", "BTN_PUMPKIN"}   # Pueden recibir GPIO.output()
+                      "BTN_WEB"}   # Pueden recibir GPIO.output()
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -1347,38 +1347,138 @@ class AgentChatRequest(BaseModel):
     history:  list[AgentMessage] = []
 
 
-async def _aquarium_agent_stream(message: str, history: list[AgentMessage], pin_states: dict):
+async def _aquarium_agent_stream(message: str, history: list[AgentMessage], pin_states: dict, pin_numbers: dict):
     """
     Agente de acuario con streaming SSE.
-    Intenta usar OpenAI si OPENAI_API_KEY está configurada,
-    en caso contrario responde con lógica básica del acuario.
+    Prioridad:
+      1. Fast-path local  → comandos y consultas conocidos (instantáneo)
+      2. LLM (OpenRouter / OpenAI) → preguntas complejas o no reconocidas
     """
     import os as _os
-    api_key = _os.getenv("OPENAI_API_KEY", "")
 
-    if api_key:
+    # ── Fast-path: respuestas instantáneas sin IA ───────────────────────
+    _ON_WORDS   = ["enciende", "encender", "activa", "activar", "arranca", "on", "sube"]
+    _OFF_WORDS  = ["apaga", "apagar", "desactiva", "desactivar", "para", "off", "baja"]
+    _ALL_WORDS  = ["todo", "todos", "everything", "all"]
+    DEVICE_ALIASES: list[tuple[list[str], str | None]] = [
+        (["filtro", "filter"],                         "Filtro"),
+        (["calentador", "calor", "heat", "heater"],     "Calentador"),
+        (["oxigenador", "oxígeno", "oxigeno", "aire"],  "Oxigenador"),
+        (["blanca", "white", "luz blanca"],             "Luz Blanca"),
+        (["azul", "blue", "luz azul"],                  "Luz Azul"),
+        (["luz", "luces", "light"],                     None),
+        (["comedero", "comida", "food", "feeder"],       "Comedero"),
+    ]
+
+    async def _do_set(name: str, state: int) -> str:
+        pin_num = pin_numbers.get(name)
+        if pin_num is None:
+            return f"❌ No encontré '{name}'"
+        if pin_states.get(name, -1) == state:
+            return f"{'✅' if state else '🔴'} {name} ya {'encendido' if state else 'apagado'}"
+        try:
+            await toggle_pin(pin_num, source="AGENT")
+            return f"{'✅' if state else '🔴'} {name} {'encendido' if state else 'apagado'}"
+        except Exception as ex:
+            return f"❌ Error en {name}: {ex}"
+
+    msg_low    = message.lower()
+    on_devices  = [n for n, s in pin_states.items() if s == 1]
+    off_devices = [n for n, s in pin_states.items() if s == 0]
+    is_on_cmd   = any(w in msg_low for w in _ON_WORDS)
+    is_off_cmd  = any(w in msg_low for w in _OFF_WORDS)
+    is_all_cmd  = any(w in msg_low for w in _ALL_WORDS)
+    fast_resp: str | None = None
+
+    if (is_on_cmd or is_off_cmd) and is_all_cmd:
+        state     = 1 if is_on_cmd else 0
+        results   = [await _do_set(n, state) for n in pin_numbers]
+        fast_resp = ("✅ Todos encendidos:\n" if state else "🔴 Todos apagados:\n") + "\n".join(results)
+    elif is_on_cmd or is_off_cmd:
+        state   = 1 if is_on_cmd else 0
+        matched: list[str] = []
+        for keywords, dev_name in DEVICE_ALIASES:
+            if any(kw in msg_low for kw in keywords):
+                matched += ["Luz Blanca", "Luz Azul"] if dev_name is None else [dev_name]
+        if matched:
+            fast_resp = "\n".join([await _do_set(n, state) for n in matched])
+        # sin match de dispositivo → deja ir al LLM
+    elif any(w in msg_low for w in ["estado", "qué hay", "que hay", "cómo está",
+                                     "como esta", "qué está", "que esta", "qué tienes", "que tienes"]):
+        fast_resp  = f"🟢 Encendidos: {', '.join(on_devices) if on_devices else 'ninguno'}\n"
+        fast_resp += f"🔴 Apagados: {', '.join(off_devices) if off_devices else 'ninguno'}"
+    elif any(w in msg_low for w in ["hola", "buenas", "hey", "buenos días", "buenos dias", "saludos"]):
+        fast_resp = "¡Hola! ¿En qué puedo ayudarte con el acuario?"
+    elif any(w in msg_low for w in ["gracias", "thanks", "ok", "vale", "perfecto", "genial", "de acuerdo"]):
+        fast_resp = "¡De nada! Aquí estoy si necesitas algo más."
+    elif any(w in msg_low for w in ["ayuda", "help", "qué puedes", "que puedes",
+                                     "comandos", "que sabes", "qué sabes", "que haces", "qué haces"]):
+        fast_resp = (
+            "Puedo:\n"
+            "• Encender/apagar dispositivos (filtro, calentador, oxigenador, luces, comedero)\n"
+            "• Consultar el estado de todos los dispositivos\n"
+            "• Responder preguntas sobre el acuario\n"
+            "Ejemplos: \"enciende el filtro\", \"apaga todo\", \"estado\""
+        )
+
+    if fast_resp is not None:
+        yield f"data: {json.dumps({'mode': 'local'})}\n\n"
+        yield f"data: {json.dumps({'token': fast_resp})}\n\n"
+        yield "data: [DONE]\n\n"
+        return
+
+    # ── LLM para preguntas complejas o no reconocidas ─────────────────────────
+    openrouter_key = _os.getenv("OPENROUTER_API_KEY", "")
+    openai_key     = _os.getenv("OPENAI_API_KEY", "")
+
+    # Permite override del modelo y base URL por variable de entorno
+    llm_key     = openrouter_key or openai_key
+    llm_url     = _os.getenv("LLM_BASE_URL",
+                    "https://openrouter.ai/api/v1/chat/completions" if openrouter_key
+                    else "https://api.openai.com/v1/chat/completions")
+    llm_model   = _os.getenv("LLM_MODEL",
+                    "openai/gpt-oss-20b:free" if openrouter_key
+                    else "gpt-4o-mini")
+
+    if llm_key:
         try:
             import httpx
+            # Informar al cliente qué modo está activo
+            provider = "OpenRouter" if openrouter_key else "OpenAI"
+            yield f"data: {json.dumps({'mode': 'llm', 'model': llm_model, 'provider': provider})}\n\n"
             system_prompt = (
                 "Eres el asistente inteligente de un acuario automatizado con Raspberry Pi. "
-                "Puedes controlar dispositivos, responder preguntas y dar consejos sobre el acuario. "
-                f"Estado actual de los dispositivos: {json.dumps(pin_states, ensure_ascii=False)}. "
-                "Responde en español, de forma concisa y útil."
+                "Puedes controlar dispositivos, responder preguntas y dar consejos sobre acuarios. "
+                f"Estado actual de los dispositivos (nombre: estado 0=OFF 1=ON): "
+                f"{json.dumps(pin_states, ensure_ascii=False)}. "
+                "Responde siempre en español, de forma concisa y útil. "
+                "Si el usuario pide encender o apagar algo, indícale que lo has procesado "
+                "pero que el control real lo ejecuta el sistema de forma separada."
             )
             messages = [{"role": "system", "content": system_prompt}]
-            for h in history[-10:]:  # últimos 10 turnos
+            for h in history[-10:]:
                 messages.append({"role": h.role, "content": h.content})
             messages.append({"role": "user", "content": message})
 
-            async with httpx.AsyncClient(timeout=30) as client:
+            headers = {
+                "Authorization": f"Bearer {llm_key}",
+                "Content-Type":  "application/json",
+            }
+            if openrouter_key:
+                headers["HTTP-Referer"] = "https://aquapi.local"
+                headers["X-Title"]      = "AquaPi Asistente"
+
+            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=30, write=10, pool=5)) as client:
                 async with client.stream(
-                    "POST",
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                    json={"model": "gpt-4o-mini", "messages": messages, "stream": True},
+                    "POST", llm_url,
+                    headers=headers,
+                    json={"model": llm_model, "messages": messages, "stream": True, "max_tokens": 512},
                 ) as resp:
+                    if resp.status_code != 200:
+                        body_text = await resp.aread()
+                        raise ValueError(f"HTTP {resp.status_code}: {body_text[:200]}")
                     async for line in resp.aiter_lines():
-                        if line.startswith("data: ") and line != "data: [DONE]":
+                        if line.startswith("data: ") and line.strip() != "data: [DONE]":
                             try:
                                 chunk = json.loads(line[6:])
                                 delta = chunk["choices"][0]["delta"].get("content", "")
@@ -1389,40 +1489,12 @@ async def _aquarium_agent_stream(message: str, history: list[AgentMessage], pin_
             yield "data: [DONE]\n\n"
             return
         except Exception as e:
-            logger.warning(f"OpenAI streaming fallback: {e}")
+            logger.warning(f"LLM streaming error ({llm_model}), usando lógica local: {e}")
 
-    # ── Fallback: respuesta local básica ────────────────────────────────────────
-    msg_low = message.lower()
-    on_devices  = [n for n, s in pin_states.items() if s == 1]
-    off_devices = [n for n, s in pin_states.items() if s == 0]
 
-    if any(w in msg_low for w in ["estado", "qué hay", "que hay", "cómo está", "como esta"]):
-        resp = f"🟢 Encendidos: {', '.join(on_devices) if on_devices else 'ninguno'}\n"
-        resp += f"🔴 Apagados: {', '.join(off_devices[:5]) if off_devices else 'ninguno'}"
-    elif any(w in msg_low for w in ["hola", "buenas", "hey"]):
-        resp = "🎃 ¡Hola! Soy el asistente del acuario. Puedo informarte sobre el estado de los dispositivos y ayudarte a controlarlo."
-    elif any(w in msg_low for w in ["temperatura", "temp"]):
-        resp = "🌡️ Para ver la temperatura del agua revisa el gauge en la pantalla principal."
-    elif any(w in msg_low for w in ["luz", "light"]):
-        blanca = pin_states.get("Luz Blanca", 0)
-        azul   = pin_states.get("Luz Azul", 0)
-        resp = f"💡 Luz Blanca: {'ON' if blanca else 'OFF'} | Luz Azul: {'ON' if azul else 'OFF'}"
-    elif any(w in msg_low for w in ["filtro", "filter"]):
-        filtro = pin_states.get("Filtro", 0)
-        resp = f"💧 Filtro: {'funcionando ✅' if filtro else 'apagado ❌'}"
-    elif any(w in msg_low for w in ["ayuda", "help", "qué puedes", "que puedes"]):
-        resp = ("🤯 Puedo informarte sobre:\n"
-                "• Estado de dispositivos (\"estado\")\n"
-                "• Temperatura del agua\n"
-                "• Estado de luces y filtro\n"
-                "Para control avanzado configura OPENAI_API_KEY.")
-    else:
-        resp = f"🧠 Entendí: \"{message}\". Actualmente {len(on_devices)} dispositivo(s) encendidos. Para respuestas más inteligentes configura OPENAI_API_KEY en el servidor."
-
-    # Stream carácter a carácter para efecto typing
-    for char in resp:
-        yield f"data: {json.dumps({'token': char})}\n\n"
-        await asyncio.sleep(0.015)
+    # LLM no disponible o falló → mensaje genérico instantáneo
+    yield f"data: {json.dumps({'mode': 'local'})}\n\n"
+    yield f"data: {json.dumps({'token': '🤔 Sin conexión con la IA. Prueba: estado, enciende el filtro, ayuda'})}\n\n"
     yield "data: [DONE]\n\n"
 
 
@@ -1432,11 +1504,12 @@ async def agent_chat(body: AgentChatRequest):
     # Obtener estado actual de dispositivos
     async with get_db() as db:
         async with db.execute(
-            "SELECT name, current_state FROM pin_configurations "
-            "WHERE pin_type IN ('BTN_WEB','GPIO_OUTPUT','GPIO_PWM','BTN_PUMPKIN')"
+            "SELECT pin_number, name, current_state FROM pin_configurations "
+            "WHERE pin_type IN ('BTN_WEB','GPIO_OUTPUT','GPIO_PWM')"
         ) as cur:
             rows = await cur.fetchall()
-    pin_states = {r["name"]: int(r["current_state"]) for r in rows}
+    pin_states  = {r["name"]: int(r["current_state"]) for r in rows}
+    pin_numbers = {r["name"]: r["pin_number"]          for r in rows}
 
     # Guardar en voice_chat_logs
     async with get_db() as db:
@@ -1447,15 +1520,160 @@ async def agent_chat(body: AgentChatRequest):
         await db.commit()
 
     return StreamingResponse(
-        _aquarium_agent_stream(body.message, body.history, pin_states),
+        _aquarium_agent_stream(body.message, body.history, pin_states, pin_numbers),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
 # ─────────────────────────────────────────────────────────────────
-# WEBSOCKET ENDPOINT
+# TTS  (Edge Neural + Piper local)
 # ─────────────────────────────────────────────────────────────────
+PIPER_BIN    = "/opt/piper/piper"
+PIPER_VOICES = "/opt/piper/voices"
+
+PIPER_VOICE_MAP: dict[str, dict] = {
+    "es_ES-davefx-medium":    {"label": "Davefx (ES)",   "gender": "masculino", "locale": "es-ES"},
+    "es_ES-sharvard-medium":  {"label": "Sharvard (ES)", "gender": "femenino",  "locale": "es-ES"},
+    "es_MX-claude-high":      {"label": "Claude (MX)",   "gender": "masculino", "locale": "es-MX"},
+    "es_ES-mls_10246-low":    {"label": "MLS (ES)",      "gender": "femenino",  "locale": "es-ES"},
+}
+
+class TTSRequest(BaseModel):
+    text:   str
+    voice:  str   = "es-ES-XimenaNeural"
+    engine: str   = "edge"      # "edge" | "piper"
+    pitch:  int   = 0           # semitonos: -12..+12 (SoX)
+    speed:  float = 1.0         # 0.5..2.0
+    effect: str   = "none"      # "none"|"reverb"|"echo"|"robot"|"cave"
+
+def _build_sox_effects(pitch: int, speed: float, effect: str) -> list[str]:
+    """Construye los argumentos extra de SoX para pitch/speed/efectos."""
+    args: list[str] = []
+    if speed != 1.0:
+        speed = max(0.5, min(2.0, speed))
+        args += ["tempo", str(round(speed, 2))]
+    if pitch != 0:
+        pitch = max(-12, min(12, pitch))
+        args += ["pitch", str(pitch * 100)]   # SoX usa centésimas de semitono
+    if effect == "reverb":
+        args += ["reverb", "50", "50", "100", "100", "0", "0"]
+    elif effect == "echo":
+        args += ["echo", "0.8", "0.9", "100", "0.4", "200", "0.3"]
+    elif effect == "robot":
+        args += ["pitch", "0", "overdrive", "10", "bass", "5"]
+    elif effect == "cave":
+        args += ["reverb", "80", "60", "200", "100", "0", "0", "echo", "0.8", "0.85", "60", "0.3", "120", "0.2"]
+    return args
+
+@app.post("/api/v1/tts", summary="Text-to-speech (Edge Neural / Piper local)")
+async def tts_endpoint(body: TTSRequest, token: str = Query(default="")):
+    """Devuelve audio MP3. Motor edge=Microsoft Neural (online) o piper=local."""
+    import shutil, asyncio, tempfile, os
+
+    text = body.text.strip()[:600]
+    if not text:
+        raise HTTPException(400, "Texto vacío")
+
+    sox_path = shutil.which("sox")
+
+    # ── PIPER (local) ──────────────────────────────────────────────────────
+    if body.engine == "piper":
+        if not os.path.isfile(PIPER_BIN):
+            raise HTTPException(501, "Piper no instalado. Ejecuta install_piper.sh en la Pi")
+        model_path = f"{PIPER_VOICES}/{body.voice}.onnx"
+        if not os.path.isfile(model_path):
+            raise HTTPException(404, f"Modelo Piper no encontrado: {body.voice}")
+
+        sox_effects = _build_sox_effects(body.pitch, body.speed, body.effect)
+
+        import asyncio as _asyncio
+
+        # Paso 1: Piper genera PCM raw
+        p1 = await _asyncio.create_subprocess_exec(
+            PIPER_BIN, "--model", model_path, "--output_raw",
+            stdin=_asyncio.subprocess.PIPE,
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.DEVNULL,
+        )
+        pcm_data, _ = await p1.communicate(input=text.encode())
+
+        if not pcm_data:
+            raise HTTPException(500, "Piper no generó audio")
+
+        # Paso 2: SoX convierte PCM → WAV (con efectos opcionales)
+        sox_cmd = [
+            "sox", "-r", "22050", "-e", "signed", "-b", "16", "-c", "1", "-t", "raw", "-",
+            "-t", "wav", "-",
+        ] + sox_effects
+        p2 = await _asyncio.create_subprocess_exec(
+            *sox_cmd,
+            stdin=_asyncio.subprocess.PIPE,
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.DEVNULL,
+        )
+        audio_data, _ = await p2.communicate(input=pcm_data)
+
+        if not audio_data:
+            raise HTTPException(500, "SoX no generó audio")
+
+        from starlette.responses import Response
+        return Response(
+            content=audio_data,
+            media_type="audio/wav",
+            headers={"Cache-Control": "no-cache", "Content-Length": str(len(audio_data))},
+        )
+
+    # ── EDGE TTS (online) ──────────────────────────────────────────────────
+    try:
+        import edge_tts
+    except ImportError:
+        raise HTTPException(503, "edge-tts no instalado. Ejecuta: pip install edge-tts")
+
+    # Siempre buffereamos primero para capturar errores de red antes de responder
+    import io as _io
+    buf = _io.BytesIO()
+    try:
+        communicate = edge_tts.Communicate(text, body.voice)
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                buf.write(chunk["data"])
+    except Exception as exc:
+        raise HTTPException(502, f"Error edge-tts: {exc}")
+
+    mp3_data = buf.getvalue()
+    if not mp3_data:
+        raise HTTPException(500, "edge-tts no devolvió audio")
+
+    # Aplicar efectos SoX si se pidieron
+    need_sox = (body.pitch != 0 or body.speed != 1.0 or body.effect != "none")
+    if need_sox and sox_path:
+        import asyncio as _asyncio
+        sox_effects = _build_sox_effects(body.pitch, body.speed, body.effect)
+        sox_cmd = ["sox", "-t", "mp3", "-", "-t", "mp3", "-C", "128", "-"] + sox_effects
+        proc = await _asyncio.create_subprocess_exec(
+            *sox_cmd,
+            stdin=_asyncio.subprocess.PIPE,
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.DEVNULL,
+        )
+        mp3_data, _ = await proc.communicate(input=mp3_data)
+
+    from starlette.responses import Response
+    return Response(content=mp3_data, media_type="audio/mpeg",
+                    headers={"Cache-Control": "no-cache", "Content-Length": str(len(mp3_data))})
+
+@app.get("/api/v1/tts/voices", summary="Lista de voces Piper instaladas")
+async def tts_voices():
+    """Devuelve las voces Piper disponibles en el sistema."""
+    import os
+    available = []
+    for key, meta in PIPER_VOICE_MAP.items():
+        path = f"{PIPER_VOICES}/{key}.onnx"
+        available.append({**meta, "name": key, "installed": os.path.isfile(path)})
+    return {"piper": available}
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = Query(default="")):
     if not _verify_token(token):
