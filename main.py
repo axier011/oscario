@@ -23,7 +23,7 @@ import hmac
 import secrets
 from fastapi import FastAPI, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
@@ -93,51 +93,53 @@ logger = logging.getLogger("aquapi")
 #           GPIO_SPI | GPIO_I2C | GPIO_UART | GPIO_PWM | GPIO_CLOCK | ID_EEPROM
 # ─────────────────────────────────────────────────────────────────
 DEFAULT_PINS: list[tuple] = [
-    (1,  -1, "3V3 Power",         "POWER_3V3",   False, 1),
-    (2,  -1, "5V Power",          "POWER_5V",    False, 1),
-    (3,   2, "GPIO2 (I2C SDA)",   "GPIO_I2C",    False, 0),
-    (4,  -1, "5V Power",          "POWER_5V",    False, 1),
-    (5,   3, "GPIO3 (I2C SCL)",   "GPIO_I2C",    False, 0),
-    (6,  -1, "Ground",            "GROUND",      False, 0),
-    (7,   4, "calentador nuevo",  "GPIO_CLOCK",  False, 0),
-    (8,  14, "GPIO14 (UART TXD)", "GPIO_UART",   False, 0),
-    (9,  -1, "Ground",            "GROUND",      False, 0),
-    (10, 15, "GPIO15 (UART RXD)", "GPIO_UART",   False, 0),
-    (11, 17, "Luz Blanca",        "GPIO_PWM",    False, 0),
-    (12, 18, "GPIO18 (PCM CLK)",  "GPIO_PWM",    False, 0),
-    (13, 27, "Luz Azul",          "GPIO_PWM",    False, 0),
-    (14, -1, "Ground",            "GROUND",      False, 0),
-    (15, 22, "Filtro",            "GPIO_OUTPUT", False, 0),
-    (16, 23, "Bomba Agua",        "GPIO_OUTPUT", False, 0),
-    (17, -1, "3V3 Power",         "POWER_3V3",   False, 1),
-    (18, 24, "Oxigenador",        "GPIO_OUTPUT", False, 0),
-    (19, 10, "GPIO10 (SPI MOSI)", "GPIO_SPI",    False, 0),
-    (20, -1, "Ground",            "GROUND",      False, 0),
-    (21,  9, "GPIO9 (SPI MISO)",  "GPIO_SPI",    False, 0),
-    (22, 25, "Calentador",        "GPIO_OUTPUT", False, 0),
-    (23, 11, "GPIO11 (SPI SCLK)", "GPIO_SPI",    False, 0),
-    (24,  8, "GPIO8 (SPI CE0)",   "GPIO_SPI",    False, 0),
-    (25, -1, "Ground",            "GROUND",      False, 0),
-    (26,  7, "GPIO7 (SPI CE1)",   "GPIO_SPI",    False, 0),
-    (27,  0, "GPIO0 (ID SD)",     "ID_EEPROM",   False, 0),
-    (28,  1, "GPIO1 (ID SC)",     "ID_EEPROM",   False, 0),
-    (29,  5, "Botón Filtro",      "GPIO_INPUT",  False, 0),
-    (30, -1, "Ground",            "GROUND",      False, 0),
-    (31,  6, "Botón Calentador",  "GPIO_INPUT",  False, 0),
-    (32, 12, "GPIO12 (PWM0)",     "GPIO_PWM",    False, 0),
-    (33, 13, "GPIO13 (PWM1)",     "GPIO_PWM",    False, 0),
-    (34, -1, "Ground",            "GROUND",      False, 0),
-    (35, 19, "GPIO19 (PCM FS)",   "GPIO_PWM",    False, 0),
-    (36, 16, "Botón Oxigenador",  "GPIO_INPUT",  False, 0),
-    (37, 26, "Botón Luz Blanca",  "GPIO_INPUT",  False, 0),
-    (38, 20, "Botón Luz Azul",    "GPIO_INPUT",  False, 0),
-    (39, -1, "Ground",            "GROUND",      False, 0),
-    (40, 21, "Botón Comedero",    "GPIO_INPUT",  False, 0),
+    (1,  -1, "3V3 Power",          "POWER_3V3",    False, 1),
+    (2,  -1, "5V Power",           "POWER_5V",     False, 1),
+    (3,   2, "GPIO2 (I2C SDA)",    "GPIO_I2C",     False, 0),
+    (4,  -1, "5V Power",           "POWER_5V",     False, 1),
+    (5,   3, "GPIO3 (I2C SCL)",    "GPIO_I2C",     False, 0),
+    (6,  -1, "Ground",             "GROUND",       False, 0),
+    (7,   4, "Oxigenador",         "BTN_WEB",      False, 0),  # relé
+    (8,  14, "GPIO14 (UART TXD)",  "GPIO_UART",    False, 0),
+    (9,  -1, "Ground",             "GROUND",       False, 0),
+    (10, 15, "GPIO15 (UART RXD)",  "GPIO_UART",    False, 0),
+    (11, 17, "Calentador",         "BTN_WEB",      False, 0),  # relé
+    (12, 18, "Botón Calentador",   "BTN_PHYSICAL", False, 0),  # → pin 11
+    (13, 27, "Botón Oxigenador",   "BTN_PHYSICAL", False, 0),  # → pin 7
+    (14, -1, "Ground",             "GROUND",       False, 0),
+    (15, 22, "Filtro",             "BTN_WEB",      False, 0),  # relé
+    (16, 23, "Botón Filtro",       "BTN_PHYSICAL", False, 0),  # → pin 15
+    (17, -1, "3V3 Power",          "POWER_3V3",    False, 1),
+    (18, 24, "Luz Blanca",         "BTN_WEB",      False, 0),  # relé
+    (19, 10, "Pantalla MOSI",      "DISPLAY",      False, 0),
+    (20, -1, "Ground",             "GROUND",       False, 0),
+    (21,  9, "Comedero",           "BTN_WEB",      False, 0),  # relé
+    (22, 25, "Botón Comedero",     "BTN_PHYSICAL", False, 0),  # → pin 21
+    (23, 11, "Pantalla SCLK",      "DISPLAY",      False, 0),
+    (24,  8, "Pantalla CE0",       "DISPLAY",      False, 0),
+    (25, -1, "Ground",             "GROUND",       False, 0),
+    (26,  7, "Luz Azul",           "BTN_WEB",      False, 0),  # relé
+    (27,  0, "GPIO0 (ID SD)",      "ID_EEPROM",    False, 0),
+    (28,  1, "GPIO1 (ID SC)",      "ID_EEPROM",    False, 0),
+    (29,  5, "Pantalla DC",        "DISPLAY",      False, 0),
+    (30, -1, "Ground",             "GROUND",       False, 0),
+    (31,  6, "Pantalla RST",       "DISPLAY",      False, 0),
+    (32, 12, "Pantalla MOSI",      "DISPLAY",      False, 0),
+    (33, 13, "Pantalla MISO",      "DISPLAY",      False, 0),
+    (34, -1, "Ground",             "GROUND",       False, 0),
+    (35, 19, "Pantalla BL",        "DISPLAY",      False, 0),
+    (36, 16, "Botón Calabaza",     "BTN_PUMPKIN",  False, 0),  # botón calabaza
+    (37, 26, "Botón Luz",          "BTN_PHYSICAL", False, 0),  # ciclo Blanca→Azul→OFF (pin 37)
+    (38, 20, "Pin 38",             "GPIO_OUTPUT",  False, 0),  # libre
+    (39, -1, "Ground",             "GROUND",       False, 0),
+    (40, 21, "Pin 40",             "GPIO_OUTPUT",  False, 0),  # libre
 ]
 
 # Pines GPIO que pueden ser controlables (BCM >= 0 y tipo GPIO_OUTPUT o GPIO_INPUT)
-CONTROLLABLE_TYPES = {"GPIO_OUTPUT", "GPIO_INPUT", "GPIO_PWM", "GPIO_CLOCK"}
-TOGGLEABLE_TYPES   = {"GPIO_OUTPUT", "GPIO_PWM", "GPIO_CLOCK"}   # Pueden recibir GPIO.output()
+CONTROLLABLE_TYPES = {"GPIO_OUTPUT", "GPIO_INPUT", "GPIO_PWM", "GPIO_CLOCK",
+                      "BTN_WEB", "BTN_PHYSICAL", "BTN_PUMPKIN"}
+TOGGLEABLE_TYPES   = {"GPIO_OUTPUT", "GPIO_PWM", "GPIO_CLOCK",
+                      "BTN_WEB", "BTN_PUMPKIN"}   # Pueden recibir GPIO.output()
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -285,13 +287,20 @@ async def init_db() -> None:
             await db.commit()
             logger.info(f"✅ {len(DEFAULT_PINS)} pines GPIO insertados en pin_configurations")
 
-        # ── Asignar target_pin a botones físicos (si no están asignados) ─
-        _BUTTON_TARGETS = {29: 11, 31: 13, 36: 15, 37: 16, 38: 18, 40: 22}
+        # ── Asignar target_pin a botones físicos ──────────────────
+        # PIN 12 (Botón Calentador) → PIN 11 (relé Calentador)
+        # PIN 13 (Botón Oxigenador) → PIN 7  (relé Oxigenador)
+        # PIN 16 (Botón Filtro)     → PIN 15 (relé Filtro)
+        # PIN 22 (Botón Comedero)   → PIN 21 (relé Comedero)
+        # PIN 19 (Botón Luz) cicla Blanca/Azul — sin target_pin, lógica especial
+        _BUTTON_TARGETS = {12: 11, 13: 7, 16: 15, 22: 21}
         for btn_pin, target in _BUTTON_TARGETS.items():
             await db.execute(
-                "UPDATE pin_configurations SET target_pin = ? WHERE pin_number = ? AND target_pin IS NULL",
+                "UPDATE pin_configurations SET target_pin = ? WHERE pin_number = ?",
                 (target, btn_pin),
             )
+        # Botón Luz (pin 19): sin target_pin directo
+        await db.execute("UPDATE pin_configurations SET target_pin = NULL WHERE pin_number = 19")
         # ── Exclusión mutua: Luz Blanca ↔ Luz Azul (por nombre) ─────────
         await db.execute("""
             UPDATE pin_configurations
@@ -537,10 +546,50 @@ async def schedule_daily_report() -> None:
             logger.error(f"Error en schedule_daily_report: {exc}")
 
 
+# ── Botón de ciclo Luz Blanca → Luz Azul → OFF (pin 19) ──────────────────────
+_BTN_LUZ_PIN    = 37   # botón físico (PIN 37, BCM 26)
+_RELE_BLANCA    = 18   # relé Luz Blanca
+_RELE_AZUL      = 26   # relé Luz Azul
+
+# ── Botón comedero: impulso de 1.5 s (pin 22 → relé pin 21) ──────────────────
+_BTN_COMEDERO   = 22
+_RELE_COMEDERO  = 21
+_PULSE_SECS     = 1.5
+
+# ── Botón calabaza: abre agente (pin 36, no toggle de estado) ─────────────────
+_BTN_PUMPKIN    = 36
+
+
+async def pulse_pin(pin_number: int, duration: float, source: str, metadata: Optional[dict] = None) -> None:
+    """Enciende un pin durante `duration` segundos y lo apaga automáticamente."""
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT current_state FROM pin_configurations WHERE pin_number = ?", (pin_number,)
+        ) as cur:
+            row = await cur.fetchone()
+    if row and int(row["current_state"]) == 0:
+        await toggle_pin(pin_number, source=source, metadata=metadata)
+    asyncio.get_event_loop().call_later(
+        duration,
+        lambda: asyncio.create_task(_turn_off_pin(pin_number, source, metadata))
+    )
+
+
+async def _turn_off_pin(pin_number: int, source: str, metadata: Optional[dict]) -> None:
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT current_state FROM pin_configurations WHERE pin_number = ?", (pin_number,)
+        ) as cur:
+            row = await cur.fetchone()
+    if row and int(row["current_state"]) == 1:
+        await toggle_pin(pin_number, source=source, metadata=metadata)
+
+
 async def poll_physical_buttons() -> None:
     """
-    Monitoriza botones físicos (GPIO_INPUT con target_pin asignado).
+    Monitoriza botones físicos (BTN_PHYSICAL).
     Detecta flancos descendentes y hace toggle del dispositivo objetivo.
+    PIN 19 tiene lógica especial de ciclo: Blanca → Azul → OFF.
     """
     logger.info("🔁 Tarea de polling de botones físicos iniciada")
     while True:
@@ -548,7 +597,7 @@ async def poll_physical_buttons() -> None:
             async with get_db() as db:
                 async with db.execute(
                     "SELECT pin_number, bcm_number, target_pin FROM pin_configurations "
-                    "WHERE pin_type = 'GPIO_INPUT' AND bcm_number >= 0 AND target_pin IS NOT NULL"
+                    "WHERE pin_type IN ('GPIO_INPUT', 'BTN_PHYSICAL') AND bcm_number >= 0"
                 ) as cur:
                     buttons = [dict(r) for r in await cur.fetchall()]
 
@@ -559,11 +608,47 @@ async def poll_physical_buttons() -> None:
 
                 # Flanco descendente = botón presionado (pull-up interno)
                 if prev == 1 and current_hw == 0:
-                    await toggle_pin(
-                        pin_number=target,
-                        source="PHYSICAL_BUTTON",
-                        metadata={"button_pin": pin, "bcm": bcm},
-                    )
+                    if pin == _BTN_LUZ_PIN:
+                        # Ciclo: ambas OFF → Blanca ON → Azul ON (Blanca OFF) → ambas OFF
+                        async with get_db() as _db:
+                            async with _db.execute(
+                                "SELECT pin_number, current_state FROM pin_configurations "
+                                "WHERE pin_number IN (?,?)", (_RELE_BLANCA, _RELE_AZUL)
+                            ) as _cur:
+                                _states = {r["pin_number"]: int(r["current_state"]) async for r in _cur}
+                        blanca = _states.get(_RELE_BLANCA, 0)
+                        azul   = _states.get(_RELE_AZUL,   0)
+                        meta   = {"button_pin": pin, "bcm": bcm, "mode": "luz_cycle"}
+                        if blanca == 0 and azul == 0:
+                            # Estado: OFF → encender Blanca
+                            await toggle_pin(_RELE_BLANCA, source="PHYSICAL_BUTTON", metadata=meta)
+                        elif blanca == 1 and azul == 0:
+                            # Estado: Blanca → pasar a Azul
+                            await toggle_pin(_RELE_BLANCA, source="PHYSICAL_BUTTON", metadata=meta)
+                            await toggle_pin(_RELE_AZUL,   source="PHYSICAL_BUTTON", metadata=meta)
+                        else:
+                            # Estado: Azul (o ambas) → apagar todo
+                            if azul   == 1: await toggle_pin(_RELE_AZUL,   source="PHYSICAL_BUTTON", metadata=meta)
+                            if blanca == 1: await toggle_pin(_RELE_BLANCA, source="PHYSICAL_BUTTON", metadata=meta)
+                    elif pin == _BTN_COMEDERO:
+                        # Impulso: enciende relé comedero 1.5 s y apaga solo
+                        await pulse_pin(_RELE_COMEDERO, _PULSE_SECS, source="PHYSICAL_BUTTON",
+                                        metadata={"button_pin": pin, "bcm": bcm, "mode": "pulse"})
+                    elif pin == _BTN_PUMPKIN:
+                        # Calabaza: emite evento especial, no cambia estado
+                        await manager.broadcast({
+                            "event":     "PUMPKIN_PRESS",
+                            "pin":       pin,
+                            "source":    "PHYSICAL_BUTTON",
+                            "timestamp": datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
+                        })
+                        logger.info("🎃 Botón calabaza pulsado")
+                    elif target:
+                        await toggle_pin(
+                            pin_number=target,
+                            source="PHYSICAL_BUTTON",
+                            metadata={"button_pin": pin, "bcm": bcm},
+                        )
 
                 _prev_button_states[pin] = current_hw
 
@@ -979,6 +1064,65 @@ async def toggle_gpio(pin_number: int, body: ToggleRequest):
     )
 
 
+@app.post("/api/v1/gpio/simulate-press/{pin_number}", summary="Simula la pulsación de un botón físico")
+async def simulate_press(pin_number: int):
+    """
+    Simula un flanco descendente en un BTN_PHYSICAL o BTN_PUMPKIN.
+    Ejecuta la misma lógica que poll_physical_buttons.
+    """
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT pin_type, target_pin FROM pin_configurations WHERE pin_number = ?",
+            (pin_number,)
+        ) as cur:
+            row = await cur.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Pin {pin_number} no encontrado")
+    if row["pin_type"] not in ("BTN_PHYSICAL", "GPIO_INPUT", "BTN_PUMPKIN"):
+        raise HTTPException(status_code=400, detail="El pin no es un botón simulable")
+
+    meta = {"button_pin": pin_number, "simulated": True}
+
+    if pin_number == _BTN_LUZ_PIN:
+        async with get_db() as _db:
+            async with _db.execute(
+                "SELECT pin_number, current_state FROM pin_configurations WHERE pin_number IN (?,?)",
+                (_RELE_BLANCA, _RELE_AZUL)
+            ) as _cur:
+                _states = {r["pin_number"]: int(r["current_state"]) async for r in _cur}
+        blanca = _states.get(_RELE_BLANCA, 0)
+        azul   = _states.get(_RELE_AZUL,   0)
+        if blanca == 0 and azul == 0:
+            await toggle_pin(_RELE_BLANCA, source="SIMULATE", metadata=meta)
+        elif blanca == 1 and azul == 0:
+            await toggle_pin(_RELE_BLANCA, source="SIMULATE", metadata=meta)
+            await toggle_pin(_RELE_AZUL,   source="SIMULATE", metadata=meta)
+        else:
+            if azul   == 1: await toggle_pin(_RELE_AZUL,   source="SIMULATE", metadata=meta)
+            if blanca == 1: await toggle_pin(_RELE_BLANCA, source="SIMULATE", metadata=meta)
+        return {"simulated": True, "pin": pin_number, "mode": "luz_cycle"}
+
+    target = row["target_pin"]
+    if target:
+        if pin_number == _BTN_COMEDERO or target == _RELE_COMEDERO:
+            # Impulso 1.5 s
+            await pulse_pin(_RELE_COMEDERO, _PULSE_SECS, source="SIMULATE", metadata=meta)
+            return {"simulated": True, "pin": pin_number, "target": target, "mode": "pulse", "duration": _PULSE_SECS}
+        result = await toggle_pin(target, source="SIMULATE", metadata=meta)
+        return {"simulated": True, "pin": pin_number, "target": target, "new_state": result["new_state"]}
+
+    # BTN_PUMPKIN — no toggle, emite evento especial
+    if row["pin_type"] == "BTN_PUMPKIN" or pin_number == _BTN_PUMPKIN:
+        await manager.broadcast({
+            "event":     "PUMPKIN_PRESS",
+            "pin":       pin_number,
+            "source":    "SIMULATE",
+            "timestamp": datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
+        })
+        return {"simulated": True, "pin": pin_number, "mode": "pumpkin_press"}
+
+
 @app.post("/api/v1/gpio/set/{pin_number}", summary="Establece un estado específico")
 async def set_gpio(pin_number: int, state: int = Query(..., ge=0, le=1), body: ToggleRequest = ToggleRequest()):
     """
@@ -1189,6 +1333,124 @@ async def post_sensor_data(body: SensorDataRequest):
         "timestamp": datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
     })
     return {"id": row_id, "status": "created"}
+
+
+# ─────────────────────────────────────────────────────────────────
+# AGENTE DE CHAT (Calabaza)
+# ─────────────────────────────────────────────────────────────────
+class AgentMessage(BaseModel):
+    role: str   # "user" | "assistant"
+    content: str
+
+class AgentChatRequest(BaseModel):
+    message:  str
+    history:  list[AgentMessage] = []
+
+
+async def _aquarium_agent_stream(message: str, history: list[AgentMessage], pin_states: dict):
+    """
+    Agente de acuario con streaming SSE.
+    Intenta usar OpenAI si OPENAI_API_KEY está configurada,
+    en caso contrario responde con lógica básica del acuario.
+    """
+    import os as _os
+    api_key = _os.getenv("OPENAI_API_KEY", "")
+
+    if api_key:
+        try:
+            import httpx
+            system_prompt = (
+                "Eres el asistente inteligente de un acuario automatizado con Raspberry Pi. "
+                "Puedes controlar dispositivos, responder preguntas y dar consejos sobre el acuario. "
+                f"Estado actual de los dispositivos: {json.dumps(pin_states, ensure_ascii=False)}. "
+                "Responde en español, de forma concisa y útil."
+            )
+            messages = [{"role": "system", "content": system_prompt}]
+            for h in history[-10:]:  # últimos 10 turnos
+                messages.append({"role": h.role, "content": h.content})
+            messages.append({"role": "user", "content": message})
+
+            async with httpx.AsyncClient(timeout=30) as client:
+                async with client.stream(
+                    "POST",
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    json={"model": "gpt-4o-mini", "messages": messages, "stream": True},
+                ) as resp:
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: ") and line != "data: [DONE]":
+                            try:
+                                chunk = json.loads(line[6:])
+                                delta = chunk["choices"][0]["delta"].get("content", "")
+                                if delta:
+                                    yield f"data: {json.dumps({'token': delta})}\n\n"
+                            except Exception:
+                                pass
+            yield "data: [DONE]\n\n"
+            return
+        except Exception as e:
+            logger.warning(f"OpenAI streaming fallback: {e}")
+
+    # ── Fallback: respuesta local básica ────────────────────────────────────────
+    msg_low = message.lower()
+    on_devices  = [n for n, s in pin_states.items() if s == 1]
+    off_devices = [n for n, s in pin_states.items() if s == 0]
+
+    if any(w in msg_low for w in ["estado", "qué hay", "que hay", "cómo está", "como esta"]):
+        resp = f"🟢 Encendidos: {', '.join(on_devices) if on_devices else 'ninguno'}\n"
+        resp += f"🔴 Apagados: {', '.join(off_devices[:5]) if off_devices else 'ninguno'}"
+    elif any(w in msg_low for w in ["hola", "buenas", "hey"]):
+        resp = "🎃 ¡Hola! Soy el asistente del acuario. Puedo informarte sobre el estado de los dispositivos y ayudarte a controlarlo."
+    elif any(w in msg_low for w in ["temperatura", "temp"]):
+        resp = "🌡️ Para ver la temperatura del agua revisa el gauge en la pantalla principal."
+    elif any(w in msg_low for w in ["luz", "light"]):
+        blanca = pin_states.get("Luz Blanca", 0)
+        azul   = pin_states.get("Luz Azul", 0)
+        resp = f"💡 Luz Blanca: {'ON' if blanca else 'OFF'} | Luz Azul: {'ON' if azul else 'OFF'}"
+    elif any(w in msg_low for w in ["filtro", "filter"]):
+        filtro = pin_states.get("Filtro", 0)
+        resp = f"💧 Filtro: {'funcionando ✅' if filtro else 'apagado ❌'}"
+    elif any(w in msg_low for w in ["ayuda", "help", "qué puedes", "que puedes"]):
+        resp = ("🤯 Puedo informarte sobre:\n"
+                "• Estado de dispositivos (\"estado\")\n"
+                "• Temperatura del agua\n"
+                "• Estado de luces y filtro\n"
+                "Para control avanzado configura OPENAI_API_KEY.")
+    else:
+        resp = f"🧠 Entendí: \"{message}\". Actualmente {len(on_devices)} dispositivo(s) encendidos. Para respuestas más inteligentes configura OPENAI_API_KEY en el servidor."
+
+    # Stream carácter a carácter para efecto typing
+    for char in resp:
+        yield f"data: {json.dumps({'token': char})}\n\n"
+        await asyncio.sleep(0.015)
+    yield "data: [DONE]\n\n"
+
+
+@app.post("/api/v1/agent/chat", summary="Chat con el agente de acuario")
+async def agent_chat(body: AgentChatRequest):
+    """Streaming SSE del agente de acuario."""
+    # Obtener estado actual de dispositivos
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT name, current_state FROM pin_configurations "
+            "WHERE pin_type IN ('BTN_WEB','GPIO_OUTPUT','GPIO_PWM','BTN_PUMPKIN')"
+        ) as cur:
+            rows = await cur.fetchall()
+    pin_states = {r["name"]: int(r["current_state"]) for r in rows}
+
+    # Guardar en voice_chat_logs
+    async with get_db() as db:
+        await db.execute(
+            "INSERT INTO voice_chat_logs (raw_transcript, interpreted_intent, execution_status, bot_response) VALUES (?,?,?,?)",
+            (body.message, "agent_chat", "streaming", "")
+        )
+        await db.commit()
+
+    return StreamingResponse(
+        _aquarium_agent_stream(body.message, body.history, pin_states),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ─────────────────────────────────────────────────────────────────

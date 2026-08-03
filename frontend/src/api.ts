@@ -54,6 +54,10 @@ export async function apiRenamePin(pinNumber: number, name: string): Promise<voi
   })
 }
 
+export async function apiSimulatePress(pinNumber: number): Promise<void> {
+  await request(`/gpio/simulate-press/${pinNumber}`, { method: 'POST' })
+}
+
 export async function apiFetchLogs(
   page = 1,
   source?: string,

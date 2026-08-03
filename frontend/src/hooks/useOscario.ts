@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { apiRenamePin, apiSetPin, apiTogglePin } from '../api'
-import { CTRL_TYPES, DEFAULT_VISIBLE, SCENES } from '../constants'
+import { CTRL_TYPES, DEFAULT_VISIBLE, SCENES, TOGGLEABLE_FE } from '../constants'
 import type { LogEntry, Pin, ToastItem, ToastType, WsStatus } from '../types'
 
 // ─── State shape ──────────────────────────────────────────────────────────────
@@ -13,6 +13,7 @@ export interface OscarioState {
   lastCpuTemp:   number | null
   activeScene:   string | null
   toasts:        ToastItem[]
+  pumpkinPressed: boolean
   // actions
   togglePin:        (pinNumber: number) => Promise<void>
   setAllPins:       (state: number) => Promise<void>
@@ -22,6 +23,7 @@ export interface OscarioState {
   activateScene:    (sceneId: string) => Promise<void>
   addToast:         (type: ToastType, msg: string) => void
   removeToast:      (id: number) => void
+  clearPumpkin:     () => void
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -42,12 +44,13 @@ export function useOscario(): OscarioState {
   const [lastCpuTemp,   setLastCpuTemp]   = useState<number | null>(null)
   const [activeScene,   setActiveScene]   = useState<string | null>(null)
   const [toasts,        setToasts]        = useState<ToastItem[]>([])
+  const [pumpkinPressed, setPumpkinPressed] = useState(false)
 
   const [visiblePins, setVisiblePinsState] = useState<number[]>(() => {
     try {
       const ver    = localStorage.getItem('osc-visible-v')
       const stored = localStorage.getItem('osc-visible')
-      if (ver === '3' && stored) return JSON.parse(stored) as number[]
+      if (ver === '4' && stored) return JSON.parse(stored) as number[]
     } catch { /* ignore */ }
     return DEFAULT_VISIBLE
   })
@@ -55,7 +58,7 @@ export function useOscario(): OscarioState {
   // Persist visiblePins to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('osc-visible',   JSON.stringify(visiblePins))
-    localStorage.setItem('osc-visible-v', '3')
+    localStorage.setItem('osc-visible-v', '4')
   }, [visiblePins])
 
   // ── Toast helpers ────────────────────────────────────────────────────────────
@@ -147,6 +150,9 @@ export function useOscario(): OscarioState {
           const value      = msg['value']       as number
           if (sensorName === 'DS18B20_Temperatura') setLastWaterTemp(value)
           if (sensorName === 'CPU_Temp')            setLastCpuTemp(value)
+
+        } else if (event === 'PUMPKIN_PRESS') {
+          setPumpkinPressed(true)
         }
       }
 
@@ -182,7 +188,7 @@ export function useOscario(): OscarioState {
 
   const setAllPins = useCallback(async (state: number): Promise<void> => {
     const targets = Object.values(pins).filter(p =>
-      CTRL_TYPES.has(p.pin_type) && visiblePins.includes(p.pin_number) && p.current_state !== state
+      TOGGLEABLE_FE.has(p.pin_type) && visiblePins.includes(p.pin_number) && p.current_state !== state
     )
     for (const p of targets) {
       try { await apiSetPin(p.pin_number, state) }
@@ -238,9 +244,11 @@ export function useOscario(): OscarioState {
     }
   }, [pins])
 
+  const clearPumpkin = useCallback(() => setPumpkinPressed(false), [])
+
   return {
-    pins, logs, wsStatus, visiblePins, lastWaterTemp, lastCpuTemp, activeScene, toasts,
+    pins, logs, wsStatus, visiblePins, lastWaterTemp, lastCpuTemp, activeScene, toasts, pumpkinPressed,
     togglePin, setAllPins, renamePin, addToPanel, removeFromPanel, activateScene,
-    addToast, removeToast,
+    addToast, removeToast, clearPumpkin,
   }
 }

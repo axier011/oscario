@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useOsc } from '../hooks/useOscario'
-import { PM, faFor } from '../constants'
+import { PM, faFor, TOGGLEABLE_FE } from '../constants'
 import { apiSetPin } from '../api'
 import ContextMenu  from './ContextMenu'
 import RenameModal  from './RenameModal'
@@ -17,9 +17,12 @@ export default function PinCard({ pinNumber }: Props) {
   const [ctxPos,     setCtxPos]     = useState<{ x: number; y: number } | null>(null)
   const [showRename, setShowRename] = useState(false)
 
+  const isToggleable = TOGGLEABLE_FE.has(pin?.pin_type ?? '')
+
   const handleClick = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!pin) return
+    if (!TOGGLEABLE_FE.has(pin.pin_type)) return   // entradas físicas: solo lectura
     if (isFeed) {
       const luzBlanca = Object.values(pins).find(p => p.name.toLowerCase().includes('blanca'))
       if (luzBlanca) {
@@ -78,20 +81,24 @@ export default function PinCard({ pinNumber }: Props) {
   return (
     <>
       <div
-        className={`pin-card${isOn ? ' state-on' : ''}`}
+        className={`pin-card${isOn ? ' state-on' : ''}${!isToggleable ? ' readonly' : ''}`}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
+        title={!isToggleable ? 'Entrada física — solo lectura' : undefined}
       >
         <div className="pc-row">
           <div className={`pc-icon-circle${isOn ? ' on' : ''}`}>
             <i className={`fa-solid ${icon}`} />
           </div>
           <span className="pc-name" title={pin.name}>{pin.name}</span>
-          <div
-            className={`ios-toggle${isOn ? ' on' : ''}`}
-            onClick={handleClick}
-            title={isOn ? 'Apagar' : 'Encender'}
-          />
+          {isToggleable
+            ? <div
+                className={`ios-toggle${isOn ? ' on' : ''}`}
+                onClick={handleClick}
+                title={isOn ? 'Apagar' : 'Encender'}
+              />
+            : <i className="fa-solid fa-lock" style={{ color: 'var(--t3)', fontSize: 13 }} title="Entrada física" />
+          }
         </div>
 
         <div className="pc-row-between">

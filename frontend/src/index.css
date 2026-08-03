@@ -271,6 +271,8 @@ input  { font-family: inherit; }
   position: relative;
 }
 .pin-card:hover            { border-color: rgba(255,255,255,.18); background: var(--hover); }
+.pin-card.readonly         { cursor: default; opacity: .75; }
+.pin-card.readonly:hover   { border-color: var(--border); background: var(--card); }
 .pin-card.state-on         { border-color: var(--teal); }
 .pin-card.state-on::before {
   content: ''; position: absolute; inset: 0; border-radius: var(--r);
@@ -596,6 +598,9 @@ html[data-theme="light"] .gpio-pin-dot {
 .gpio-pin-dot.ctrl    { cursor: pointer; }
 .gpio-pin-dot.ctrl:hover { filter: brightness(1.2); transform: scale(1.15); }
 .gpio-pin-dot.ctrl-on { animation: pulse-glow 2s infinite; }
+.gpio-pin-dot.btn-sim { cursor: pointer; outline: 2px dashed rgba(255,200,0,.6); outline-offset: 1px; }
+.gpio-pin-dot.btn-sim:hover { filter: brightness(1.25); transform: scale(1.2); outline-color: var(--amber); }
+.gpio-pin-dot.btn-sim:active { transform: scale(.92); }
 .gpio-pin-num { font-size: .55rem; font-weight: 700; pointer-events: none; }
 
 /* ── Log history ─────────────────────────────────────────────────────────── */

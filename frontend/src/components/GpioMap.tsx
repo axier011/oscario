@@ -1,5 +1,6 @@
 import { useOsc } from '../hooks/useOscario'
-import { CTRL_TYPES, GPIO_PINS, PM } from '../constants'
+import { CTRL_TYPES, GPIO_PINS, PM, TOGGLEABLE_FE } from '../constants'
+import { apiSimulatePress } from '../api'
 import type { Pin } from '../types'
 
 export default function GpioMap() {
@@ -38,9 +39,27 @@ export default function GpioMap() {
     return (getDbPin(physPin)?.current_state ?? 0) === 1
   }
 
+  function isPhysicalBtn(physPin: number, staticType: string): boolean {
+    const type = getDbPin(physPin)?.pin_type ?? staticType
+    return type === 'BTN_PHYSICAL' || type === 'BTN_PUMPKIN'
+  }
+
   async function handlePinClick(physPin: number, staticType: string) {
     if (!isCtrl(physPin, staticType)) return
     const dbPin = getDbPin(physPin)
+    const type  = dbPin?.pin_type ?? staticType
+
+    if (type === 'BTN_PHYSICAL' || type === 'BTN_PUMPKIN') {
+      // Simular pulsación del botón físico
+      try {
+        await apiSimulatePress(physPin)
+        addToast('ok', `⚡ ${dbPin?.name ?? `PIN ${physPin}`}: pulsación simulada`)
+      } catch (e: unknown) {
+        addToast('error', `Error simulando PIN ${physPin}`)
+      }
+      return
+    }
+
     await togglePin(physPin)
     if (dbPin) {
       addToast(dbPin.current_state === 1 ? 'off' : 'on',
@@ -73,20 +92,20 @@ export default function GpioMap() {
 
                 {/* Odd pin dot */}
                 <div
-                  className={`gpio-pin-dot${oddCtrl ? ' ctrl' : ''}${oddCtrl && oddOn ? ' ctrl-on' : ''}`}
+                  className={`gpio-pin-dot${oddCtrl ? ' ctrl' : ''}${oddCtrl && oddOn ? ' ctrl-on' : ''}${isPhysicalBtn(odd.pin, odd.type) ? ' btn-sim' : ''}`}
                   style={{ background: getPinColor(odd.pin, odd.type) }}
                   onClick={() => handlePinClick(odd.pin, odd.type)}
-                  title={`PIN ${odd.pin}`}
+                  title={isPhysicalBtn(odd.pin, odd.type) ? `⚡ Simular pulsación — ${getLabel(odd.pin, odd.label)}` : `PIN ${odd.pin}`}
                 >
                   <span className="gpio-pin-num">{odd.pin}</span>
                 </div>
 
                 {/* Even pin dot */}
                 <div
-                  className={`gpio-pin-dot${evenCtrl ? ' ctrl' : ''}${evenCtrl && evenOn ? ' ctrl-on' : ''}`}
+                  className={`gpio-pin-dot${evenCtrl ? ' ctrl' : ''}${evenCtrl && evenOn ? ' ctrl-on' : ''}${isPhysicalBtn(even.pin, even.type) ? ' btn-sim' : ''}`}
                   style={{ background: getPinColor(even.pin, even.type) }}
                   onClick={() => handlePinClick(even.pin, even.type)}
-                  title={`PIN ${even.pin}`}
+                  title={isPhysicalBtn(even.pin, even.type) ? `⚡ Simular pulsación — ${getLabel(even.pin, even.label)}` : `PIN ${even.pin}`}
                 >
                   <span className="gpio-pin-num">{even.pin}</span>
                 </div>
@@ -112,6 +131,7 @@ export default function GpioMap() {
         <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: 'var(--c5v)',    marginRight: 4, verticalAlign: 'middle' }} />5V</span>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: 'var(--c33v)',   marginRight: 4, verticalAlign: 'middle' }} />3.3V</span>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#4a5568',       marginRight: 4, verticalAlign: 'middle' }} />GND</span>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: 'var(--cin)', outline: '2px dashed var(--amber)', outlineOffset: 1, marginRight: 4, verticalAlign: 'middle' }} />⚡ Clic = simular pulsación</span>
       </div>
     </div>
   )
