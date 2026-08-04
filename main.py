@@ -318,6 +318,15 @@ async def init_db() -> None:
         """)
         await db.commit()
 
+        # ── Migrar pin_type si cambió en DEFAULT_PINS ─────────────
+        for row in DEFAULT_PINS:
+            pin_num, _, _, pin_type, _, _ = row
+            await db.execute(
+                "UPDATE pin_configurations SET pin_type = ? WHERE pin_number = ? AND pin_type != ?",
+                (pin_type, pin_num, pin_type),
+            )
+        await db.commit()
+
         # ── Inicializar hardware GPIO ─────────────────────────────
         async with db.execute(
             "SELECT bcm_number, pin_type, current_state FROM pin_configurations"

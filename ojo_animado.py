@@ -66,10 +66,10 @@ def main():
     spi = busio.SPI(board.SCK, board.MOSI)
     
     display_bus = FourWire(
-        spi, 
-        command=board.D4, 
-        chip_select=board.D8, 
-        reset=board.D13, 
+        spi,
+        command=board.D5,    # DC → BCM 5, PIN 29
+        chip_select=board.D8, # CE0 → BCM 8, PIN 24
+        reset=board.D6,       # RST → BCM 6, PIN 31
         baudrate=60000000
     )
     
