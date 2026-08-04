@@ -152,7 +152,7 @@ export function useOscario(): OscarioState {
           if (sensorName === 'CPU_Temp')            setLastCpuTemp(value)
 
         } else if (event === 'PUMPKIN_PRESS') {
-          setPumpkinPressed(true)
+          setPumpkinPressed(prev => !prev)
         }
       }
 

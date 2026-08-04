@@ -336,7 +336,7 @@ async def init_db() -> None:
         for row in gpio_init_rows:
             bcm, ptype, state = row["bcm_number"], row["pin_type"], row["current_state"]
             if bcm >= 0 and ptype in CONTROLLABLE_TYPES:
-                if ptype == "GPIO_INPUT":
+                if ptype in ("GPIO_INPUT", "BTN_PHYSICAL", "BTN_PUMPKIN"):
                     GPIO.setup(bcm, GPIO.IN, pull_up_down=GPIO.PUD_UP)
                 else:
                     GPIO.setup(bcm, GPIO.OUT)
@@ -606,7 +606,7 @@ async def poll_physical_buttons() -> None:
             async with get_db() as db:
                 async with db.execute(
                     "SELECT pin_number, bcm_number, target_pin FROM pin_configurations "
-                    "WHERE pin_type IN ('GPIO_INPUT', 'BTN_PHYSICAL') AND bcm_number >= 0"
+                    "WHERE pin_type IN ('GPIO_INPUT', 'BTN_PHYSICAL', 'BTN_PUMPKIN') AND bcm_number >= 0"
                 ) as cur:
                     buttons = [dict(r) for r in await cur.fetchall()]
 
