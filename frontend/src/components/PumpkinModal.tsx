@@ -44,24 +44,22 @@ export default function PumpkinModal({ onClose }: Props) {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
   useEffect(() => { inputRef.current?.focus() }, [])
 
+  // Hablar el mensaje de bienvenida al abrir el modal
+  useEffect(() => {
+    void speak('¡Hola! Soy el asistente del acuario. ¿En qué te ayudo?')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function speak(text: string) {
     if (mutedRef.current) return
-    const prev = audioRef.current
-    audioRef.current = null
-    prev?.pause()
+    // Reproducir en la Pi (auriculares conectados al hardware)
     try {
       const token = localStorage.getItem('oscario-token') ?? ''
-      const resp = await fetch('/api/v1/tts', {
+      await fetch('/api/v1/tts/play', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ text, voice: TTS_VOICE, engine: 'edge', pitch: TTS_PITCH, speed: TTS_SPEED, effect: TTS_EFFECT }),
       })
-      if (!resp.ok) return
-      const url = URL.createObjectURL(await resp.blob())
-      const audio = new Audio(url)
-      audioRef.current = audio
-      audio.onended = () => { URL.revokeObjectURL(url); if (audioRef.current === audio) audioRef.current = null }
-      await audio.play().catch(() => {})
     } catch { /* ignore */ }
   }
 

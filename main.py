@@ -17,6 +17,24 @@ from typing import Any, Optional
 
 import aiosqlite
 import base64
+
+# Carga manual del .env (sin dependencia externa)
+def _load_dotenv(path: str = ".env") -> None:
+    """Lee KEY=VALUE del .env y los pone en os.environ si no existen ya."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                os.environ.setdefault(key, value)
+    except FileNotFoundError:
+        pass
+
+_load_dotenv()
 import configparser
 import hashlib
 import hmac
@@ -1437,6 +1455,13 @@ async def _aquarium_agent_stream(message: str, history: list[AgentMessage], pin_
         return
 
     # ── LLM para preguntas complejas o no reconocidas ─────────────────────────
+    use_llm = _os.getenv("AGENT_USE_LLM", "true").strip().lower() in ("1", "true", "yes")
+    if not use_llm:
+        yield f"data: {json.dumps({'mode': 'local'})}\n\n"
+        yield f"data: {json.dumps({'token': '🤔 No reconozco ese comando. Prueba: estado, enciende el filtro, apaga todo, ayuda.'})}\n\n"
+        yield "data: [DONE]\n\n"
+        return
+
     openrouter_key = _os.getenv("OPENROUTER_API_KEY", "")
     openai_key     = _os.getenv("OPENAI_API_KEY", "")
 
@@ -1540,6 +1565,11 @@ async def agent_chat(body: AgentChatRequest):
 # ─────────────────────────────────────────────────────────────────
 PIPER_BIN    = "/opt/piper/piper"
 PIPER_VOICES = "/opt/piper/voices"
+
+# Dispositivo ALSA para la salida de audio.
+# En esta Pi el jack 3.5mm es card 0: bcm2835 Headphones → hw:Headphones
+# Se puede sobreescribir con la variable de entorno ALSA_DEVICE.
+ALSA_DEVICE = os.getenv("ALSA_DEVICE", "hw:Headphones")
 
 PIPER_VOICE_MAP: dict[str, dict] = {
     "es_ES-davefx-medium":    {"label": "Davefx (ES)",   "gender": "masculino", "locale": "es-ES"},
@@ -1671,6 +1701,135 @@ async def tts_endpoint(body: TTSRequest, token: str = Query(default="")):
     from starlette.responses import Response
     return Response(content=mp3_data, media_type="audio/mpeg",
                     headers={"Cache-Control": "no-cache", "Content-Length": str(len(mp3_data))})
+
+@app.post("/api/v1/tts/play", summary="TTS reproducido localmente en la Pi (auriculares)")
+async def tts_play_local(body: TTSRequest, token: str = Query(default="")):
+    """Genera TTS y lo reproduce en la salida de audio local de la Pi (p.ej. auriculares).
+    Devuelve {"ok": true} inmediatamente; la reproducción ocurre en segundo plano."""
+    import shutil as _shutil, asyncio as _asyncio
+
+    text = body.text.strip()[:600]
+    if not text:
+        raise HTTPException(400, "Texto vacío")
+
+    sox_path = _shutil.which("sox")
+
+    async def _play(audio_data: bytes, fmt: str) -> None:
+        """Reproduce bytes de audio (fmt='wav' o 'mp3') en el jack 3.5mm de la Pi."""
+        aplay  = _shutil.which("aplay")
+        mpg123 = _shutil.which("mpg123")
+        ffplay = _shutil.which("ffplay")
+
+        if fmt == "wav" and aplay:
+            proc = await _asyncio.create_subprocess_exec(
+                aplay, "-q", "-D", ALSA_DEVICE, "-",
+                stdin=_asyncio.subprocess.PIPE,
+                stdout=_asyncio.subprocess.DEVNULL,
+                stderr=_asyncio.subprocess.DEVNULL,
+            )
+            await proc.communicate(input=audio_data)
+        elif fmt == "mp3" and mpg123:
+            proc = await _asyncio.create_subprocess_exec(
+                mpg123, "-q", "-a", ALSA_DEVICE, "-",
+                stdin=_asyncio.subprocess.PIPE,
+                stdout=_asyncio.subprocess.DEVNULL,
+                stderr=_asyncio.subprocess.DEVNULL,
+            )
+            await proc.communicate(input=audio_data)
+        elif sox_path:
+            # sox puede manejar ambos formatos y enviar al dispositivo ALSA del jack
+            cmd = ["sox", f"-t{fmt}", "-", "-t", "alsa", ALSA_DEVICE]
+            proc = await _asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=_asyncio.subprocess.PIPE,
+                stdout=_asyncio.subprocess.DEVNULL,
+                stderr=_asyncio.subprocess.DEVNULL,
+            )
+            await proc.communicate(input=audio_data)
+        elif ffplay:
+            proc = await _asyncio.create_subprocess_exec(
+                ffplay, "-nodisp", "-autoexit", "-loglevel", "quiet",
+                "-audio_device", ALSA_DEVICE, "-",
+                stdin=_asyncio.subprocess.PIPE,
+                stdout=_asyncio.subprocess.DEVNULL,
+                stderr=_asyncio.subprocess.DEVNULL,
+            )
+            await proc.communicate(input=audio_data)
+        else:
+            logging.warning("tts/play: no se encontró aplay, mpg123, sox ni ffplay")
+
+    # ── PIPER (local) ───────────────────────────────────────────────────────
+    if body.engine == "piper":
+        if not os.path.isfile(PIPER_BIN):
+            raise HTTPException(501, "Piper no instalado")
+        model_path = f"{PIPER_VOICES}/{body.voice}.onnx"
+        if not os.path.isfile(model_path):
+            raise HTTPException(404, f"Modelo Piper no encontrado: {body.voice}")
+
+        sox_effects = _build_sox_effects(body.pitch, body.speed, body.effect)
+
+        p1 = await _asyncio.create_subprocess_exec(
+            PIPER_BIN, "--model", model_path, "--output_raw",
+            stdin=_asyncio.subprocess.PIPE,
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.DEVNULL,
+        )
+        pcm_data, _ = await p1.communicate(input=text.encode())
+        if not pcm_data:
+            raise HTTPException(500, "Piper no generó audio")
+
+        sox_cmd = [
+            "sox", "-r", "22050", "-e", "signed", "-b", "16", "-c", "1", "-t", "raw", "-",
+            "-t", "wav", "-",
+        ] + sox_effects
+        p2 = await _asyncio.create_subprocess_exec(
+            *sox_cmd,
+            stdin=_asyncio.subprocess.PIPE,
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.DEVNULL,
+        )
+        audio_data, _ = await p2.communicate(input=pcm_data)
+        if not audio_data:
+            raise HTTPException(500, "SoX no generó audio")
+
+        asyncio.create_task(_play(audio_data, "wav"))
+        return {"ok": True, "engine": "piper"}
+
+    # ── EDGE TTS (online) ──────────────────────────────────────────────────
+    try:
+        import edge_tts
+    except ImportError:
+        raise HTTPException(503, "edge-tts no instalado")
+
+    import io as _io
+    buf = _io.BytesIO()
+    try:
+        communicate = edge_tts.Communicate(text, body.voice)
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                buf.write(chunk["data"])
+    except Exception as exc:
+        raise HTTPException(502, f"Error edge-tts: {exc}")
+
+    mp3_data = buf.getvalue()
+    if not mp3_data:
+        raise HTTPException(500, "edge-tts no devolvió audio")
+
+    need_sox = (body.pitch != 0 or body.speed != 1.0 or body.effect != "none")
+    if need_sox and sox_path:
+        sox_effects = _build_sox_effects(body.pitch, body.speed, body.effect)
+        sox_cmd = ["sox", "-t", "mp3", "-", "-t", "mp3", "-C", "128", "-"] + sox_effects
+        proc = await _asyncio.create_subprocess_exec(
+            *sox_cmd,
+            stdin=_asyncio.subprocess.PIPE,
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.DEVNULL,
+        )
+        mp3_data, _ = await proc.communicate(input=mp3_data)
+
+    asyncio.create_task(_play(mp3_data, "mp3"))
+    return {"ok": True, "engine": "edge"}
+
 
 @app.get("/api/v1/tts/voices", summary="Lista de voces Piper instaladas")
 async def tts_voices():
