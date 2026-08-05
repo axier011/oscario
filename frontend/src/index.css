@@ -155,6 +155,10 @@ input  { font-family: inherit; }
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(38,166,154,.35);
+  overflow: hidden;
+}
+.topbar-gif {
+  width: 38px; height: 38px; object-fit: cover; border-radius: 50%;
 }
 .topbar-titles { flex: 1; min-width: 0; }
 .topbar-name {

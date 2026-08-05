@@ -26,7 +26,7 @@ function AuthenticatedApp() {
   return (
     <OscarioCtx.Provider value={oscario}>
       <div className="app">
-        <TopBar />
+        <TopBar pumpkinActive={pumpkinPressed} />
 
         <nav className="tab-bar">
           <button

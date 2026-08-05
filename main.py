@@ -586,6 +586,25 @@ _PULSE_SECS     = 1.5
 # ── Botón calabaza: abre agente (pin 36, no toggle de estado) ─────────────────
 _BTN_PUMPKIN    = 36
 
+# ── Pantalla GC9A01: reproductor de GIF (controlado por servicio ojo-display) ─
+_GIF_DIR        = os.path.dirname(os.path.abspath(__file__))
+_GIF_OJO        = os.path.join(_GIF_DIR, "ojo.gif")
+_GIF_OJO2       = os.path.join(_GIF_DIR, "ojo 2.gif")
+_GIF_STATE_FILE = os.path.join(_GIF_DIR, ".ojo_gif_actual")
+_gif_ojo2_active = False  # False = ojo.gif, True = ojo2.gif
+
+async def switch_gif(use_ojo2: bool) -> None:
+    global _gif_ojo2_active
+    gif_path = _GIF_OJO2 if use_ojo2 else _GIF_OJO
+    _gif_ojo2_active = use_ojo2
+    # El wrapper ojo_display.sh detecta el cambio en este archivo cada 0.5 s
+    try:
+        with open(_GIF_STATE_FILE, "w") as _f:
+            _f.write(gif_path)
+        logger.info(f"👁️  Pantalla GIF: {os.path.basename(gif_path)}")
+    except Exception as exc:
+        logger.warning(f"⚠️  No se pudo escribir estado GIF: {exc}")
+
 
 async def pulse_pin(pin_number: int, duration: float, source: str, metadata: Optional[dict] = None) -> None:
     """Enciende un pin durante `duration` segundos y lo apaga automáticamente."""
@@ -669,6 +688,7 @@ async def poll_physical_buttons() -> None:
                             "source":    "PHYSICAL_BUTTON",
                             "timestamp": datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
                         })
+                        asyncio.create_task(switch_gif(not _gif_ojo2_active))
                         logger.info("🎃 Botón calabaza pulsado")
                     elif target:
                         await toggle_pin(
@@ -1147,7 +1167,16 @@ async def simulate_press(pin_number: int):
             "source":    "SIMULATE",
             "timestamp": datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
         })
+        asyncio.create_task(switch_gif(not _gif_ojo2_active))
         return {"simulated": True, "pin": pin_number, "mode": "pumpkin_press"}
+
+
+@app.post("/api/v1/eye/gif", summary="Cambia el GIF de la pantalla GC9A01")
+async def set_eye_gif(request: Request):
+    """Recibe {"ojo2": true|false} y cambia el GIF en la pantalla física."""
+    data = await request.json()
+    asyncio.create_task(switch_gif(bool(data.get("ojo2", False))))
+    return {"ok": True}
 
 
 @app.post("/api/v1/gpio/set/{pin_number}", summary="Establece un estado específico")

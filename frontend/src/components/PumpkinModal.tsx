@@ -50,6 +50,16 @@ export default function PumpkinModal({ onClose }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Sincroniza el GIF de la pantalla física con la apertura/cierre del modal
+  useEffect(() => {
+    const token = localStorage.getItem('oscario-token') ?? ''
+    const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+    fetch('/api/v1/eye/gif', { method: 'POST', headers, body: JSON.stringify({ ojo2: true }) }).catch(() => {})
+    return () => {
+      fetch('/api/v1/eye/gif', { method: 'POST', headers, body: JSON.stringify({ ojo2: false }) }).catch(() => {})
+    }
+  }, [])
+
   async function speak(text: string) {
     if (mutedRef.current) return
     // Reproducir en la Pi (auriculares conectados al hardware)

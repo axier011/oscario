@@ -13,7 +13,9 @@ function applyTheme(theme: Theme) {
   document.documentElement.setAttribute('data-theme', resolved)
 }
 
-export default function TopBar() {
+interface Props { pumpkinActive?: boolean }
+
+export default function TopBar({ pumpkinActive = false }: Props) {
   const { wsStatus } = useOsc()
 
   const [theme, setTheme] = useState<Theme>(() => {
@@ -46,7 +48,11 @@ export default function TopBar() {
   return (
     <header className="topbar">
       <div className="topbar-logo">
-        <i className="fa-solid fa-fish" />
+        <img
+          src={pumpkinActive ? '/ojo2.gif' : '/ojo.gif'}
+          alt="ojo"
+          className="topbar-gif"
+        />
       </div>
 
       <div className="topbar-titles">
