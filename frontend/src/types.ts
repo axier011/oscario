@@ -28,6 +28,19 @@ export interface LogsResponse {
   pages: number
 }
 
+// ─── User management ──────────────────────────────────────────────────────────
+export type UserRole = 'admin' | 'user'
+
+export interface AppUser {
+  id: number
+  username: string
+  role: UserRole
+  is_active: boolean
+  permissions: TabId[]
+  created_at: string
+  updated_at: string
+}
+
 // ─── UI enums / unions ────────────────────────────────────────────────────────
 export type WsStatus = 'connecting' | 'connected' | 'disconnected'
 export type Theme    = 'light' | 'dark' | 'auto'

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useOsc } from '../hooks/useOscario'
-import { getToken } from '../api'
+import { getToken, apiChangeMyPassword } from '../api'
 import { isWebAuthnAvailable, registerBiometric } from '../lib/webauthn'
+import type { AppUser } from '../types'
+import UsersAdmin from './UsersAdmin'
 
 interface ActionState {
   loading: boolean
@@ -11,13 +13,42 @@ interface ActionState {
 
 const IDLE: ActionState = { loading: false, result: null, error: false }
 
-export default function SettingsTab() {
+interface Props {
+  me: AppUser | null
+}
+
+export default function SettingsTab({ me }: Props) {
   const { addToast, wsStatus } = useOsc()
   const [restart,  setRestart]  = useState<ActionState>(IDLE)
   const [pull,     setPull]     = useState<ActionState>(IDLE)
   const [push,     setPush]     = useState<ActionState>(IDLE)
   const [build,    setBuild]    = useState<ActionState>(IDLE)
   const [bioState, setBioState] = useState<ActionState>(IDLE)
+
+  const [oldPwd,    setOldPwd]    = useState('')
+  const [newPwd,    setNewPwd]    = useState('')
+  const [pwdState,  setPwdState]  = useState<ActionState>(IDLE)
+
+  async function handleChangePassword() {
+    if (newPwd.length < 6) {
+      setPwdState({ loading: false, result: 'La nueva contraseña debe tener al menos 6 caracteres', error: true })
+      return
+    }
+    setPwdState({ loading: true, result: null, error: false })
+    try {
+      await apiChangeMyPassword(oldPwd, newPwd)
+      setOldPwd('')
+      setNewPwd('')
+      setPwdState({ loading: false, result: 'Contraseña actualizada', error: false })
+      addToast('ok', 'Contraseña actualizada')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'No se pudo cambiar la contraseña'
+      setPwdState({ loading: false, result: msg, error: true })
+      addToast('off', msg)
+    } finally {
+      setTimeout(() => setPwdState(IDLE), 3_000)
+    }
+  }
 
   // Cuando el WS se reconecta tras un reinicio, limpiar el mensaje
   useEffect(() => {
@@ -193,6 +224,51 @@ export default function SettingsTab() {
           </button>
         </div>
 
+        {/* Cambiar mi contraseña */}
+        <div className="settings-card">
+          <div className="settings-card-icon" style={{ background: 'rgba(74,144,217,.15)', color: 'var(--blue)' }}>
+            <i className="fa-solid fa-lock" />
+          </div>
+          <div className="settings-card-body">
+            <div className="settings-card-name">Cambiar mi contraseña</div>
+            <div className="settings-card-desc">
+              <div className="pwd-change-form">
+                <input
+                  className="modal-input"
+                  type="password"
+                  placeholder="Contraseña actual"
+                  value={oldPwd}
+                  onChange={e => setOldPwd(e.target.value)}
+                  autoComplete="current-password"
+                />
+                <input
+                  className="modal-input"
+                  type="password"
+                  placeholder="Nueva contraseña (mín. 6)"
+                  value={newPwd}
+                  onChange={e => setNewPwd(e.target.value)}
+                  autoComplete="new-password"
+                />
+              </div>
+            </div>
+            {pwdState.result && (
+              <div className={`settings-output${pwdState.error ? ' err' : ''}`}>
+                {pwdState.result}
+              </div>
+            )}
+          </div>
+          <button
+            className={`settings-btn${pwdState.loading ? ' loading' : ''}`}
+            style={{ color: 'var(--blue)', borderColor: 'var(--blue)', background: 'rgba(74,144,217,.1)' }}
+            disabled={pwdState.loading || !oldPwd || newPwd.length < 6}
+            onClick={handleChangePassword}
+          >
+            {pwdState.loading
+              ? <><i className="fa-solid fa-spinner fa-spin" /> Guardando…</>
+              : <><i className="fa-solid fa-lock" /> Cambiar</>}
+          </button>
+        </div>
+
         {/* Biometría */}
         {isWebAuthnAvailable() && (
           <div className="settings-card">
@@ -225,6 +301,17 @@ export default function SettingsTab() {
         )}
 
       </div>
+
+      {/* Gestión de usuarios (solo administradores) */}
+      {me?.role === 'admin' && (
+        <>
+          <div className="settings-title" style={{ marginTop: 32 }}>
+            <i className="fa-solid fa-users-gear" />
+            Gestión de usuarios
+          </div>
+          <UsersAdmin />
+        </>
+      )}
     </div>
   )
 }

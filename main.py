@@ -215,6 +215,7 @@ async def init_db() -> None:
         for _sql in [
             "ALTER TABLE pin_configurations ADD COLUMN target_pin INTEGER",
             "ALTER TABLE pin_configurations ADD COLUMN mutex_pin  INTEGER",
+            "ALTER TABLE users ADD COLUMN permissions TEXT",
         ]:
             try:
                 await db.execute(_sql)
@@ -288,8 +289,40 @@ async def init_db() -> None:
             )
         """)
 
+        # ── users ───────────────────────────────────────────
+        # `permissions`: JSON con la lista de pestañas del menú visibles
+        # para el usuario (p.ej. ["ctrl","map"]). Ignorado para role='admin',
+        # que siempre ve todo el menú.
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                username      TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                password_salt TEXT NOT NULL,
+                role          TEXT NOT NULL DEFAULT 'user',
+                is_active     BOOLEAN NOT NULL DEFAULT 1,
+                permissions   TEXT,
+                created_at    TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now')),
+                updated_at    TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now'))
+            )
+        """)
+
         await db.commit()
         logger.info("✅ Esquema de base de datos verificado/creado")
+
+        # ── Migrar usuario admin del telegram.cfg si la tabla está vacía ──
+        async with db.execute("SELECT COUNT(*) FROM users") as cur:
+            (user_count,) = await cur.fetchone()
+        if user_count == 0:
+            ac = _auth_cfg()
+            pwd_hash, salt = _hash_password(ac["password"])
+            await db.execute(
+                """INSERT OR IGNORE INTO users (username, password_hash, password_salt, role, permissions)
+                   VALUES (?,?,?,'admin',?)""",
+                (ac["username"], pwd_hash, salt, json.dumps(ALL_MENU_TABS)),
+            )
+            await db.commit()
+            logger.info(f"✅ Usuario admin '{ac['username']}' migrado desde telegram.cfg")
 
         # ── Insertar pines por defecto si la tabla está vacía ─────
         async with db.execute("SELECT COUNT(*) FROM pin_configurations") as cur:
@@ -776,6 +809,50 @@ def _verify_token(token: str) -> bool:
     except Exception:
         return False
 
+
+def _token_username(token: str) -> Optional[str]:
+    """Extrae el username de un token sin validar su firma/expiración."""
+    parts = token.split(":")
+    return parts[0] if len(parts) == 3 else None
+
+
+def _hash_password(password: str, salt: Optional[str] = None) -> tuple[str, str]:
+    """PBKDF2-HMAC-SHA256 con salt aleatorio (sin dependencias extra)."""
+    salt = salt or secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
+    return digest.hex(), salt
+
+
+def _verify_password(password: str, salt: str, hash_hex: str) -> bool:
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
+    return hmac.compare_digest(digest.hex(), hash_hex)
+
+
+async def _current_username(request: Request) -> str:
+    """Devuelve el username del token de la petición (ya validado por el middleware)."""
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header[7:] if auth_header.startswith("Bearer ") else request.query_params.get("token", "")
+    username = _token_username(token) if token else None
+    if not username:
+        raise HTTPException(status_code=401, detail="No autenticado")
+    return username
+
+
+async def _get_user_by_username(db: aiosqlite.Connection, username: str) -> Optional[dict]:
+    async with db.execute("SELECT * FROM users WHERE username = ?", (username,)) as cur:
+        row = await cur.fetchone()
+    return dict(row) if row else None
+
+
+async def _require_admin(request: Request) -> dict:
+    """Verifica que el usuario del token tiene rol 'admin'; devuelve su fila."""
+    username = await _current_username(request)
+    async with get_db() as db:
+        user = await _get_user_by_username(db, username)
+    if not user or not user["is_active"] or user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Requiere rol de administrador")
+    return user
+
 # ─────────────────────────────────────────────────────────────────
 # APLICACIÓN FASTAPI
 # ─────────────────────────────────────────────────────────────────
@@ -914,9 +991,13 @@ async def _notify_login(username: str, ip: str, method: str, success: bool) -> N
 
 @app.post("/api/v1/auth/login")
 async def login(body: LoginRequest, request: Request):
-    ac = _auth_cfg()
-    ok = (body.username == ac["username"] and body.password == ac["password"])
     ip = _get_client_ip(request)
+    async with get_db() as db:
+        user = await _get_user_by_username(db, body.username)
+    ok = bool(
+        user and user["is_active"]
+        and _verify_password(body.password, user["password_salt"], user["password_hash"])
+    )
     await _notify_login(body.username, ip, "Contraseña", ok)
     if not ok:
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
@@ -1055,6 +1136,215 @@ async def wa_login_complete(request: Request):
         await db.commit()
     await _notify_login(stored["username"], _get_client_ip(request), "Face ID / Windows Hello", True)
     return {"token": _make_token(stored["username"])}
+
+
+# ─────────────────────────────────────────────────────────────────
+# GESTIÓN DE USUARIOS
+# ─────────────────────────────────────────────────────────────────
+# Pestañas del menú disponibles en el frontend; deben coincidir con TabId
+# ('ctrl' | 'map' | 'hist' | 'settings') en frontend/src/types.ts
+ALL_MENU_TABS = ["ctrl", "map", "hist", "settings"]
+
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    role: str = "user"
+    permissions: list[str] = ["ctrl"]
+
+
+class UserUpdate(BaseModel):
+    username:    Optional[str]       = None
+    role:        Optional[str]       = None
+    is_active:   Optional[bool]      = None
+    permissions: Optional[list[str]] = None
+
+
+class PasswordResetRequest(BaseModel):
+    new_password: str
+
+
+class PasswordChangeRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+def _serialize_user(row: dict) -> dict:
+    perms = ALL_MENU_TABS if row["role"] == "admin" else json.loads(row["permissions"] or "[]")
+    return {
+        "id":          row["id"],
+        "username":    row["username"],
+        "role":        row["role"],
+        "is_active":   bool(row["is_active"]),
+        "permissions": perms,
+        "created_at":  row["created_at"],
+        "updated_at":  row["updated_at"],
+    }
+
+
+def _validate_permissions(permissions: list[str]) -> list[str]:
+    invalid = set(permissions) - set(ALL_MENU_TABS)
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Permisos inválidos: {', '.join(invalid)}")
+    return sorted(set(permissions))
+
+
+async def _active_admin_count(db: aiosqlite.Connection) -> int:
+    async with db.execute("SELECT COUNT(*) FROM users WHERE role='admin' AND is_active=1") as cur:
+        (n,) = await cur.fetchone()
+    return n
+
+
+@app.get("/api/v1/users/me")
+async def get_my_user(request: Request):
+    username = await _current_username(request)
+    async with get_db() as db:
+        user = await _get_user_by_username(db, username)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return _serialize_user(user)
+
+
+@app.post("/api/v1/users/me/change-password")
+async def change_my_password(body: PasswordChangeRequest, request: Request):
+    username = await _current_username(request)
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 6 caracteres")
+    async with get_db() as db:
+        user = await _get_user_by_username(db, username)
+        if not user or not _verify_password(body.old_password, user["password_salt"], user["password_hash"]):
+            raise HTTPException(status_code=401, detail="Contraseña actual incorrecta")
+        pwd_hash, salt = _hash_password(body.new_password)
+        await db.execute(
+            """UPDATE users SET password_hash = ?, password_salt = ?,
+               updated_at = strftime('%Y-%m-%dT%H:%M:%f', 'now') WHERE username = ?""",
+            (pwd_hash, salt, username),
+        )
+        await db.commit()
+    return {"changed": True}
+
+
+@app.get("/api/v1/users")
+async def list_users(request: Request):
+    await _require_admin(request)
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT id, username, role, is_active, created_at, updated_at FROM users ORDER BY id"
+        ) as cur:
+            rows = await cur.fetchall()
+    return [_serialize_user(dict(r)) for r in rows]
+
+
+@app.post("/api/v1/users", status_code=201)
+async def create_user(body: UserCreate, request: Request):
+    await _require_admin(request)
+    username = body.username.strip()
+    if not username or len(body.password) < 6:
+        raise HTTPException(status_code=400, detail="Usuario o contraseña inválidos (mínimo 6 caracteres)")
+    if body.role not in ("admin", "user"):
+        raise HTTPException(status_code=400, detail="Rol inválido (admin/user)")
+    permissions = _validate_permissions(body.permissions)
+    pwd_hash, salt = _hash_password(body.password)
+    async with get_db() as db:
+        try:
+            await db.execute(
+                """INSERT INTO users (username, password_hash, password_salt, role, permissions)
+                   VALUES (?,?,?,?,?)""",
+                (username, pwd_hash, salt, body.role, json.dumps(permissions)),
+            )
+            await db.commit()
+        except aiosqlite.IntegrityError:
+            raise HTTPException(status_code=409, detail="El nombre de usuario ya existe")
+        user = await _get_user_by_username(db, username)
+    return _serialize_user(user)
+
+
+@app.put("/api/v1/users/{user_id}")
+async def update_user(user_id: int, body: UserUpdate, request: Request):
+    await _require_admin(request)
+    async with get_db() as db:
+        async with db.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as cur:
+            target = await cur.fetchone()
+        if not target:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        target = dict(target)
+
+        fields:  list[str] = []
+        params:  list[Any] = []
+
+        if body.username is not None:
+            new_username = body.username.strip()
+            if not new_username:
+                raise HTTPException(status_code=400, detail="Usuario inválido")
+            fields.append("username = ?")
+            params.append(new_username)
+
+        if body.role is not None:
+            if body.role not in ("admin", "user"):
+                raise HTTPException(status_code=400, detail="Rol inválido (admin/user)")
+            if target["role"] == "admin" and body.role != "admin" and await _active_admin_count(db) <= 1:
+                raise HTTPException(status_code=400, detail="Debe existir al menos un administrador activo")
+            fields.append("role = ?")
+            params.append(body.role)
+
+        if body.is_active is not None:
+            if target["role"] == "admin" and not body.is_active and await _active_admin_count(db) <= 1:
+                raise HTTPException(status_code=400, detail="Debe existir al menos un administrador activo")
+            fields.append("is_active = ?")
+            params.append(1 if body.is_active else 0)
+
+        if body.permissions is not None:
+            fields.append("permissions = ?")
+            params.append(json.dumps(_validate_permissions(body.permissions)))
+
+        if fields:
+            fields.append("updated_at = strftime('%Y-%m-%dT%H:%M:%f', 'now')")
+            params.append(user_id)
+            try:
+                await db.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", params)
+                await db.commit()
+            except aiosqlite.IntegrityError:
+                raise HTTPException(status_code=409, detail="El nombre de usuario ya existe")
+
+        async with db.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as cur:
+            row = await cur.fetchone()
+    return _serialize_user(dict(row))
+
+
+@app.delete("/api/v1/users/{user_id}")
+async def delete_user(user_id: int, request: Request):
+    admin = await _require_admin(request)
+    async with get_db() as db:
+        async with db.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as cur:
+            target = await cur.fetchone()
+        if not target:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        target = dict(target)
+        if target["username"] == admin["username"]:
+            raise HTTPException(status_code=400, detail="No puedes eliminar tu propio usuario")
+        if target["role"] == "admin" and target["is_active"] and await _active_admin_count(db) <= 1:
+            raise HTTPException(status_code=400, detail="Debe existir al menos un administrador activo")
+        await db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        await db.commit()
+    return {"deleted": True}
+
+
+@app.post("/api/v1/users/{user_id}/reset-password")
+async def reset_user_password(user_id: int, body: PasswordResetRequest, request: Request):
+    await _require_admin(request)
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 6 caracteres")
+    pwd_hash, salt = _hash_password(body.new_password)
+    async with get_db() as db:
+        cur = await db.execute(
+            """UPDATE users SET password_hash = ?, password_salt = ?,
+               updated_at = strftime('%Y-%m-%dT%H:%M:%f', 'now') WHERE id = ?""",
+            (pwd_hash, salt, user_id),
+        )
+        await db.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return {"reset": True}
 
 
 class VoiceLogRequest(BaseModel):

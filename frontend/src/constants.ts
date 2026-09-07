@@ -1,4 +1,12 @@
-import type { Scene } from './types'
+import type { Scene, TabId } from './types'
+
+// ─── Menu tabs (used for role-based permission checkboxes) ────────────────────────────────
+export const TAB_OPTIONS: { id: TabId; label: string; icon: string }[] = [
+  { id: 'ctrl',     label: 'Control',    icon: 'fa-sliders' },
+  { id: 'map',      label: 'Mapa GPIO',  icon: 'fa-microchip' },
+  { id: 'hist',     label: 'Historial',  icon: 'fa-clock-rotate-left' },
+  { id: 'settings', label: 'Ajustes',    icon: 'fa-gear' },
+]
 
 // ─── Pin type metadata map ────────────────────────────────────────────────────
 export const PM: Record<string, { c: string; ctrl: boolean; icon: string; label: string }> = {

@@ -1,4 +1,4 @@
-import type { LogsResponse } from './types'
+import type { LogsResponse, AppUser, UserRole, TabId } from './types'
 
 const BASE = '/api/v1'
 
@@ -29,7 +29,7 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
   }
   return res.json()
 }
-
+// test save s
 export async function apiTogglePin(pinNumber: number): Promise<void> {
   await request(`/gpio/toggle/${pinNumber}`, {
     method: 'POST',
@@ -84,4 +84,50 @@ export async function apiLogin(username: string, password: string): Promise<stri
   if (!res.ok) throw new Error('Usuario o contraseña incorrectos')
   const data = await res.json() as { token: string }
   return data.token
+}
+
+// ─── User management ──────────────────────────────────────────────────────────
+export async function apiGetMyUser(): Promise<AppUser> {
+  return request('/users/me') as Promise<AppUser>
+}
+
+export async function apiChangeMyPassword(oldPassword: string, newPassword: string): Promise<void> {
+  await request('/users/me/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+  })
+}
+
+export async function apiListUsers(): Promise<AppUser[]> {
+  return request('/users') as Promise<AppUser[]>
+}
+
+export async function apiCreateUser(
+  username: string,
+  password: string,
+  role: UserRole,
+  permissions: TabId[],
+): Promise<AppUser> {
+  return request('/users', {
+    method: 'POST',
+    body: JSON.stringify({ username, password, role, permissions }),
+  }) as Promise<AppUser>
+}
+
+export async function apiUpdateUser(
+  id: number,
+  data: { username?: string; role?: UserRole; is_active?: boolean; permissions?: TabId[] },
+): Promise<AppUser> {
+  return request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }) as Promise<AppUser>
+}
+
+export async function apiDeleteUser(id: number): Promise<void> {
+  await request(`/users/${id}`, { method: 'DELETE' })
+}
+
+export async function apiResetUserPassword(id: number, newPassword: string): Promise<void> {
+  await request(`/users/${id}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ new_password: newPassword }),
+  })
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { OscarioCtx, useOscario } from './hooks/useOscario'
 import LoginPage     from './components/LoginPage'
 import TopBar        from './components/TopBar'
@@ -8,20 +8,40 @@ import LogHistory    from './components/LogHistory'
 import SettingsTab   from './components/SettingsTab'
 import Toast         from './components/Toast'
 import PumpkinModal  from './components/PumpkinModal'
-import type { TabId } from './types'
+import { apiGetMyUser } from './api'
+import { TAB_OPTIONS } from './constants'
+import type { AppUser, TabId } from './types'
 
 function AuthenticatedApp() {
   const oscario = useOscario()
   const { pumpkinPressed, clearPumpkin } = oscario
 
+  const [me, setMe] = useState<AppUser | null>(null)
+  const [meLoading, setMeLoading] = useState(true)
+  useEffect(() => {
+    apiGetMyUser().then(setMe).catch(() => setMe(null)).finally(() => setMeLoading(false))
+  }, [])
+
+  const allowedTabs = me ? TAB_OPTIONS.filter(t => me.permissions.includes(t.id)) : TAB_OPTIONS
+
   const [activeTab, setActiveTab] = useState<TabId>(() => {
     return (localStorage.getItem('aquapi-tab') as TabId | null) ?? 'ctrl'
   })
+
+  // Si el usuario no tiene permiso para la pesta\u00f1a activa, cambiar a la primera permitida
+  useEffect(() => {
+    if (!meLoading && allowedTabs.length > 0 && !allowedTabs.some(t => t.id === activeTab)) {
+      switchTab(allowedTabs[0].id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meLoading, me])
 
   function switchTab(tab: TabId) {
     setActiveTab(tab)
     localStorage.setItem('aquapi-tab', tab)
   }
+
+  if (meLoading) return null
 
   return (
     <OscarioCtx.Provider value={oscario}>
@@ -29,34 +49,16 @@ function AuthenticatedApp() {
         <TopBar pumpkinActive={pumpkinPressed} />
 
         <nav className="tab-bar">
-          <button
-            className={`tab-btn${activeTab === 'ctrl' ? ' active' : ''}`}
-            onClick={() => switchTab('ctrl')}
-          >
-            <i className="fa-solid fa-sliders" />
-            <span>Control</span>
-          </button>
-          <button
-            className={`tab-btn${activeTab === 'map' ? ' active' : ''}`}
-            onClick={() => switchTab('map')}
-          >
-            <i className="fa-solid fa-microchip" />
-            <span>Mapa GPIO</span>
-          </button>
-          <button
-            className={`tab-btn${activeTab === 'hist' ? ' active' : ''}`}
-            onClick={() => switchTab('hist')}
-          >
-            <i className="fa-solid fa-clock-rotate-left" />
-            <span>Historial</span>
-          </button>
-          <button
-            className={`tab-btn${activeTab === 'settings' ? ' active' : ''}`}
-            onClick={() => switchTab('settings')}
-          >
-            <i className="fa-solid fa-gear" />
-            <span>Ajustes</span>
-          </button>
+          {allowedTabs.map(t => (
+            <button
+              key={t.id}
+              className={`tab-btn${activeTab === t.id ? ' active' : ''}`}
+              onClick={() => switchTab(t.id)}
+            >
+              <i className={`fa-solid ${t.icon}`} />
+              <span>{t.label}</span>
+            </button>
+          ))}
         </nav>
 
         <main className="page">
@@ -64,7 +66,7 @@ function AuthenticatedApp() {
             {activeTab === 'ctrl'     && <ControlTab />}
             {activeTab === 'map'      && <GpioMap />}
             {activeTab === 'hist'     && <LogHistory />}
-            {activeTab === 'settings' && <SettingsTab />}
+            {activeTab === 'settings' && <SettingsTab me={me} />}
           </div>
         </main>
 

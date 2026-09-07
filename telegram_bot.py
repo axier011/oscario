@@ -157,6 +157,8 @@ async def notify_all(message: str) -> None:
     """Envía un mensaje a todos los chat_ids autorizados."""
     if _app is None:
         return
+    if os.getenv("TELEGRAM_NOTIFICATIONS_ENABLED", "true").strip().lower() not in ("1", "true", "yes"):
+        return
     for chat_id in _allowed:
         try:
             await _app.bot.send_message(chat_id=chat_id, text=message, parse_mode="Markdown")

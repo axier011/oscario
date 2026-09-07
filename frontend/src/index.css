@@ -440,6 +440,64 @@ input  { font-family: inherit; }
 .settings-btn.push:not(:disabled):hover    { background: rgba(67,168,104,.22); }
 .settings-btn.build:not(:disabled):hover   { background: rgba(200,136,42,.22); }
 
+.pwd-change-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; max-width: 260px; }
+.pwd-change-form .modal-input { padding: 7px 10px; font-size: .82rem; }
+
+/* ── Users admin ─────────────────────────────────────────────────────────── */
+.users-admin {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 20px 24px; margin-bottom: 24px;
+}
+.users-add-form {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px;
+}
+.users-add-form .modal-input { flex: 1; min-width: 140px; width: auto; }
+.users-role-select {
+  padding: 7px 10px; border-radius: var(--rs);
+  background: var(--card); border: 1px solid var(--border);
+  color: var(--t1); font-size: .82rem; outline: none;
+}
+.users-loading { color: var(--t2); font-size: .85rem; display: flex; align-items: center; gap: 8px; }
+.users-list { display: flex; flex-direction: column; gap: 10px; }
+.users-row {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: 10px; padding: 12px 14px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--rs);
+}
+.users-row-name {
+  font-weight: 700; color: var(--t1); font-size: .9rem;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.users-row-meta { font-size: .72rem; color: var(--t2); margin-top: 2px; }
+.users-badge {
+  font-size: .65rem; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+  text-transform: uppercase; letter-spacing: .03em;
+}
+.users-badge.admin    { background: rgba(124,96,204,.15); color: var(--purple); }
+.users-badge.user     { background: rgba(74,144,217,.15);  color: var(--blue);   }
+.users-badge.inactive { background: rgba(192,68,74,.15);   color: var(--red);    }
+.users-row-actions { display: flex; align-items: center; gap: 8px; }
+.users-icon-btn {
+  width: 32px; height: 32px; border-radius: var(--rs);
+  background: var(--card); border: 1px solid var(--border); color: var(--t2);
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--tr); cursor: pointer;
+}
+.users-icon-btn:hover { color: var(--t1); border-color: var(--t2); }
+.users-icon-btn.danger:hover { color: var(--red); border-color: var(--red); }
+.users-perms-group {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.users-perms-row { width: 100%; padding-top: 8px; border-top: 1px dashed var(--border); }
+.users-perm-chip {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--border);
+  font-size: .72rem; color: var(--t2); cursor: pointer; user-select: none;
+}
+.users-perm-chip:has(input:checked) { color: var(--teal); border-color: var(--teal); background: rgba(38,166,154,.1); }
+.users-perm-chip input { accent-color: var(--teal); }
+
 /* ── Scenes grid ─────────────────────────────────────────────────────────── */
 .scenes-grid {
   display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 20px;
