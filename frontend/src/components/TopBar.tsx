@@ -48,11 +48,7 @@ export default function TopBar({ pumpkinActive = false }: Props) {
   return (
     <header className="topbar">
       <div className="topbar-logo">
-        <img
-          src={pumpkinActive ? '/ojo2.gif' : '/ojo.gif'}
-          alt="ojo"
-          className="topbar-gif"
-        />
+        <img src="/login.gif" alt="Oscario" className="topbar-logo-gif" />
       </div>
 
       <div className="topbar-titles">

@@ -13,7 +13,6 @@ export default function LoginPage({ onLogin }: Props) {
   const [loading,  setLoading]  = useState(false)
   const [bioAvail, setBioAvail] = useState(false)
   const [bioLoading, setBioLoading] = useState(false)
-  const [logoError, setLogoError] = useState(false)
 
   useEffect(() => {
     setBioAvail(isWebAuthnAvailable())
@@ -57,10 +56,7 @@ export default function LoginPage({ onLogin }: Props) {
     <div className="login-page">
       <div className="login-box">
         <div className="login-logo">
-          {logoError
-            ? <i className="fa-solid fa-fish login-logo-fallback" />
-            : <img src="/ojo.gif" alt="Oscario" className="login-logo-gif" onError={() => setLogoError(true)} />
-          }
+          <img src="/login.gif" alt="Oscario" className="login-logo-gif" />
         </div>
         <h1 className="login-title">Oscario</h1>
         <p className="login-subtitle">Control de acuario</p>

@@ -2495,6 +2495,15 @@ async def npm_build():
 
 
 # ─────────────────────────────────────────────────────────────────
+# ARCHIVOS ESTÁTICOS SUELTOS DE dist/ (ej. login.gif, ojo.gif, favicon…)
+# Debe ir DESPUÉS de todas las rutas @app.get/@app.post: al montarse en "/"
+# intercepta cualquier ruta no registrada explícitamente antes.
+# ─────────────────────────────────────────────────────────────────
+if os.path.isdir(_DIST):
+    app.mount("/", StaticFiles(directory=_DIST), name="dist-root")
+
+
+# ─────────────────────────────────────────────────────────────────
 # PUNTO DE ENTRADA
 # ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
