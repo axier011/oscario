@@ -8,7 +8,7 @@ import HealthCard     from './HealthCard'
 import SensorGauge   from './SensorGauge'
 
 export default function ControlTab() {
-  const { pins, visiblePins, lastWaterTemp, lastCpuTemp, setAllPins, addToPanel, renamePin, addToast } = useOsc()
+  const { pins, visiblePins, lastWaterTemp, lastWaterTempAt, lastCpuTemp, lastCpuTempAt, setAllPins, addToPanel, renamePin, addToast } = useOsc()
   const [showAddModal, setShowAddModal] = useState(false)
 
   const allPins   = Object.values(pins)
@@ -43,7 +43,7 @@ export default function ControlTab() {
       <div className="ctrl-header">
         <div>
           <div className="ctrl-title">Dispositivos</div>
-          <div className="ctrl-count">{onCount} ON / {total}</div>
+          <div className={`ctrl-count${onCount > 0 ? ' has-on' : ''}`}>{onCount} ON / {total}</div>
         </div>
         <div className="ctrl-actions">
           <button className="ctrl-btn on"  onClick={handleAllOn}>
@@ -78,6 +78,7 @@ export default function ControlTab() {
         <SensorGauge
           title="Temperatura agua"
           value={lastWaterTemp}
+          updatedAt={lastWaterTempAt}
           unit="°C"
           min={18}
           max={32}
@@ -87,6 +88,7 @@ export default function ControlTab() {
         <SensorGauge
           title="Temperatura CPU"
           value={lastCpuTemp}
+          updatedAt={lastCpuTempAt}
           unit="°C"
           min={30}
           max={90}

@@ -2,8 +2,8 @@ import { useOsc } from '../hooks/useOscario'
 
 const ICONS: Record<string, string> = {
   ok:    'fa-circle-check',
-  on:    'fa-power-off',
-  off:   'fa-power-off',
+  on:    'fa-toggle-on',
+  off:   'fa-toggle-off',
   error: 'fa-triangle-exclamation',
 }
 

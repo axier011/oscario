@@ -10,7 +10,9 @@ export interface OscarioState {
   wsStatus:      WsStatus
   visiblePins:   number[]
   lastWaterTemp: number | null
+  lastWaterTempAt: string | null
   lastCpuTemp:   number | null
+  lastCpuTempAt: string | null
   activeScene:   string | null
   toasts:        ToastItem[]
   pumpkinPressed: boolean
@@ -40,8 +42,10 @@ export function useOscario(): OscarioState {
   const [pins,          setPins]          = useState<Record<number, Pin>>({})
   const [logs,          setLogs]          = useState<LogEntry[]>([])
   const [wsStatus,      setWsStatus]      = useState<WsStatus>('connecting')
-  const [lastWaterTemp, setLastWaterTemp] = useState<number | null>(null)
-  const [lastCpuTemp,   setLastCpuTemp]   = useState<number | null>(null)
+  const [lastWaterTemp, setLastWaterTemp]     = useState<number | null>(null)
+  const [lastWaterTempAt, setLastWaterTempAt] = useState<string | null>(null)
+  const [lastCpuTemp,   setLastCpuTemp]       = useState<number | null>(null)
+  const [lastCpuTempAt, setLastCpuTempAt]     = useState<string | null>(null)
   const [activeScene,   setActiveScene]   = useState<string | null>(null)
   const [toasts,        setToasts]        = useState<ToastItem[]>([])
   const [pumpkinPressed, setPumpkinPressed] = useState(false)
@@ -116,6 +120,15 @@ export function useOscario(): OscarioState {
           setPins(map)
           const recentLogs = (msg['recent_logs'] ?? []) as LogEntry[]
           setLogs(recentLogs)
+          const latestSensors = (msg['latest_sensors'] ?? {}) as Record<string, { value: number; at: string }>
+          if (latestSensors['DS18B20_Temperatura']) {
+            setLastWaterTemp(latestSensors['DS18B20_Temperatura'].value)
+            setLastWaterTempAt(latestSensors['DS18B20_Temperatura'].at)
+          }
+          if (latestSensors['CPU_Temp']) {
+            setLastCpuTemp(latestSensors['CPU_Temp'].value)
+            setLastCpuTempAt(latestSensors['CPU_Temp'].at)
+          }
 
         } else if (event === 'GPIO_TOGGLE') {
           const pinNum  = msg['pin_number'] as number
@@ -148,8 +161,9 @@ export function useOscario(): OscarioState {
         } else if (event === 'SENSOR_DATA') {
           const sensorName = msg['sensor_name'] as string
           const value      = msg['value']       as number
-          if (sensorName === 'DS18B20_Temperatura') setLastWaterTemp(value)
-          if (sensorName === 'CPU_Temp')            setLastCpuTemp(value)
+          const ts         = msg['timestamp']   as string
+          if (sensorName === 'DS18B20_Temperatura') { setLastWaterTemp(value); setLastWaterTempAt(ts) }
+          if (sensorName === 'CPU_Temp')            { setLastCpuTemp(value);   setLastCpuTempAt(ts) }
 
         } else if (event === 'PUMPKIN_PRESS') {
           setPumpkinPressed(prev => !prev)
@@ -247,7 +261,8 @@ export function useOscario(): OscarioState {
   const clearPumpkin = useCallback(() => setPumpkinPressed(false), [])
 
   return {
-    pins, logs, wsStatus, visiblePins, lastWaterTemp, lastCpuTemp, activeScene, toasts, pumpkinPressed,
+    pins, logs, wsStatus, visiblePins, lastWaterTemp, lastWaterTempAt, lastCpuTemp, lastCpuTempAt,
+    activeScene, toasts, pumpkinPressed,
     togglePin, setAllPins, renamePin, addToPanel, removeFromPanel, activateScene,
     addToast, removeToast, clearPumpkin,
   }

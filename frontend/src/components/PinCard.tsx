@@ -116,7 +116,7 @@ export default function PinCard({ pinNumber }: Props) {
             <span className={`pc-badge ${isOn ? 'on' : 'off'}`}>
               {isOn ? 'ON' : 'OFF'}
             </span>
-            <span className="pc-meta">{label} · PIN {pin.pin_number}</span>
+            <span className="pc-meta">{bcmStr}{label} · PIN {pin.pin_number}</span>
           </div>
           <button
             className="pc-rename-btn"
@@ -125,10 +125,6 @@ export default function PinCard({ pinNumber }: Props) {
           >
             <i className="fa-solid fa-pencil" />
           </button>
-        </div>
-
-        <div className="pc-meta" style={{ fontSize: '.64rem' }}>
-          {bcmStr}PIN {pin.pin_number}
         </div>
 
         <div className={`pc-bar${isOn ? ' active' : ''}`}>

@@ -740,6 +740,58 @@ async def poll_physical_buttons() -> None:
         await asyncio.sleep(0.05)  # 50ms — 20 lecturas/seg
 
 
+_CPU_TEMP_PATH = "/sys/class/thermal/thermal_zone0/temp"
+
+
+async def _read_cpu_temp() -> Optional[float]:
+    """Lee la temperatura de la CPU del Pi (sysfs, con fallback a vcgencmd)."""
+    try:
+        with open(_CPU_TEMP_PATH, encoding="utf-8") as f:
+            return round(int(f.read().strip()) / 1000, 1)
+    except (FileNotFoundError, ValueError, PermissionError):
+        pass
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "vcgencmd", "measure_temp",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await proc.communicate()
+        txt = out.decode().strip()  # formato: temp=45.6'C
+        if "=" in txt:
+            return round(float(txt.split("=")[1].split("'")[0]), 1)
+    except Exception:
+        pass
+    return None
+
+
+async def poll_cpu_temp() -> None:
+    """Publica la temperatura de la CPU como sensor 'CPU_Temp' cada 15s."""
+    logger.info("🌡️  Tarea de lectura de temperatura CPU iniciada")
+    while True:
+        try:
+            temp = await _read_cpu_temp()
+            if temp is not None:
+                async with get_db() as db:
+                    await db.execute(
+                        "INSERT INTO sensor_data (sensor_name, value, unit) VALUES (?,?,?)",
+                        ("CPU_Temp", temp, "°C"),
+                    )
+                    await db.commit()
+                await manager.broadcast({
+                    "event":      "SENSOR_DATA",
+                    "sensor_name": "CPU_Temp",
+                    "value":      temp,
+                    "unit":       "°C",
+                    "timestamp":  datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
+                })
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning(f"No se pudo leer la temperatura de CPU: {exc}")
+
+        await asyncio.sleep(15)
+
+
 # ─────────────────────────────────────────────────────────────────
 # LIFESPAN — Startup / Shutdown
 # ─────────────────────────────────────────────────────────────────
@@ -750,6 +802,7 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(poll_physical_buttons())
     alert_task = asyncio.create_task(monitor_alerts())
     report_task = asyncio.create_task(schedule_daily_report())
+    cpu_temp_task = asyncio.create_task(poll_cpu_temp())
     # ── Telegram bot (opcional — requiere telegram.cfg con token) ──
     try:
         from telegram_bot import start_telegram_bot
@@ -763,6 +816,7 @@ async def lifespan(app: FastAPI):
     task.cancel()
     alert_task.cancel()
     report_task.cancel()
+    cpu_temp_task.cancel()
     try:
         from telegram_bot import stop_telegram_bot
         await stop_telegram_bot()
@@ -1229,7 +1283,7 @@ async def list_users(request: Request):
     await _require_admin(request)
     async with get_db() as db:
         async with db.execute(
-            "SELECT id, username, role, is_active, created_at, updated_at FROM users ORDER BY id"
+            "SELECT id, username, role, is_active, permissions, created_at, updated_at FROM users ORDER BY id"
         ) as cur:
             rows = await cur.fetchall()
     return [_serialize_user(dict(r)) for r in rows]
@@ -2180,11 +2234,22 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(default=""
                 "ORDER BY g.created_at DESC LIMIT 20"
             ) as cur:
                 recent_logs = [dict(l) for l in await cur.fetchall()]
+            latest_sensors: dict[str, dict[str, Any]] = {}
+            for _sensor_name in ("DS18B20_Temperatura", "CPU_Temp"):
+                async with db.execute(
+                    "SELECT value, created_at FROM sensor_data WHERE sensor_name = ? "
+                    "ORDER BY created_at DESC LIMIT 1",
+                    (_sensor_name,),
+                ) as cur:
+                    _row = await cur.fetchone()
+                if _row:
+                    latest_sensors[_sensor_name] = {"value": _row["value"], "at": _row["created_at"]}
 
         await websocket.send_text(json.dumps({
             "event": "INITIAL_STATE",
             "pins": pins,
             "recent_logs": recent_logs,
+            "latest_sensors": latest_sensors,
             "gpio_available": GPIO_AVAILABLE,
             "timestamp": datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
         }, default=str))

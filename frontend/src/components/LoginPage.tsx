@@ -13,6 +13,7 @@ export default function LoginPage({ onLogin }: Props) {
   const [loading,  setLoading]  = useState(false)
   const [bioAvail, setBioAvail] = useState(false)
   const [bioLoading, setBioLoading] = useState(false)
+  const [logoError, setLogoError] = useState(false)
 
   useEffect(() => {
     setBioAvail(isWebAuthnAvailable())
@@ -55,28 +56,39 @@ export default function LoginPage({ onLogin }: Props) {
   return (
     <div className="login-page">
       <div className="login-box">
-        <div className="login-logo">🐠</div>
+        <div className="login-logo">
+          {logoError
+            ? <i className="fa-solid fa-fish login-logo-fallback" />
+            : <img src="/ojo.gif" alt="Oscario" className="login-logo-gif" onError={() => setLogoError(true)} />
+          }
+        </div>
         <h1 className="login-title">Oscario</h1>
         <p className="login-subtitle">Control de acuario</p>
         <form onSubmit={handleSubmit} className="login-form">
-          <input
-            className="login-input"
-            type="text"
-            placeholder="Usuario"
-            autoComplete="username"
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            required
-          />
-          <input
-            className="login-input"
-            type="password"
-            placeholder="Contraseña"
-            autoComplete="current-password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-          />
+          <div className="login-input-wrap">
+            <i className="fa-solid fa-user" />
+            <input
+              className="login-input"
+              type="text"
+              placeholder="Usuario"
+              autoComplete="username"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              required
+            />
+          </div>
+          <div className="login-input-wrap">
+            <i className="fa-solid fa-lock" />
+            <input
+              className="login-input"
+              type="password"
+              placeholder="Contraseña"
+              autoComplete="current-password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+            />
+          </div>
           {error && <p className="login-error">{error}</p>}
           <button className="login-btn" type="submit" disabled={loading || bioLoading}>
             {loading ? 'Entrando...' : 'Entrar'}
